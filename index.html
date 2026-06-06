@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Marine — Live AIS Tracker</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+  <div id="map"></div>
+  <div id="loading-skeleton"><div class="sk-content"><div class="sk-spinner"></div><span>Connecting to AIS stream…</span></div></div>
+
+  <div id="shell">
+    <!-- Top bar -->
+    <div id="topbar">
+      <span class="brand"><svg class="brand-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="3"/><line x1="12" y1="22" x2="12" y2="8"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/></svg>HPRadar Marine</span>
+      <div style="position:relative">
+        <input id="searchInput" class="input" placeholder="Search vessels..." aria-label="Search vessels by name, MMSI, IMO, or destination" oninput="onSearchInput()" onkeydown="onSearchKey(event)" onfocus="onSearchInput()" onblur="setTimeout(()=>hideSearchResults(),200)">
+        <div id="searchResults" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--e2);max-height:240px;overflow-y:auto;margin-top:2px"></div>
+      </div>
+      <div id="chips"></div>
+      <span class="spacer"></span>
+      <div id="topbar-fixed">
+        <span class="pill" style="--pill-c:var(--accent)"><span class="n" id="sVessels">0</span> vessels</span>
+        <span class="status-pill"><span class="dot connecting" id="sDot"></span><span id="sMps">0</span> msg/s</span>
+        <button class="btn btn-icon" id="theme-tog" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle light/dark theme"></button>
+      </div>
+    </div>
+
+    <!-- Left command rail -->
+    <nav id="rail">
+      <div class="rail-item">
+        <button class="rail-btn" onclick="railToggle('layersPop')" title="Layers" aria-label="Toggle layers panel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg><span>Layers</span></button>
+        <div class="rail-pop" id="layersPop">
+          <label class="set-toggle">Trails <span class="switch"><input type="checkbox" checked onchange="toggleLayer('trails-line',this.checked)"><span class="track"></span></span></label>
+          <label class="set-toggle">Vectors <span class="switch"><input type="checkbox" checked onchange="toggleLayer('vectors-line',this.checked)"><span class="track"></span></span></label>
+          <label class="set-toggle">Hulls <span class="switch"><input type="checkbox" checked onchange="toggleLayer('hulls-fill',this.checked);toggleLayer('hulls-outline',this.checked)"><span class="track"></span></span></label>
+          <label class="set-toggle">Labels <span class="switch"><input type="checkbox" checked onchange="toggleLabels(this.checked)"><span class="track"></span></span></label>
+        </div>
+      </div>
+      <button class="rail-btn" id="railWeatherBtn" onclick="toggleWeather()" title="Weather" aria-label="Toggle weather radar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="19" x2="8" y2="21"/><line x1="8" y1="13" x2="8" y2="15"/><line x1="16" y1="19" x2="16" y2="21"/><line x1="16" y1="13" x2="16" y2="15"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="12" y1="15" x2="12" y2="17"/><path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"/></svg><span>Weather</span></button>
+      <div class="rail-item">
+        <button class="rail-btn" onclick="railToggle('mapPop')" title="Map" aria-label="Map style selector"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg><span>Map</span></button>
+        <div class="rail-pop" id="mapPop"></div>
+      </div>
+      <div class="rail-item">
+        <button class="rail-btn" onclick="railToggle('regionPop')" title="Region" aria-label="Region presets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><span>Region</span></button>
+        <div class="rail-pop" id="regionPop"></div>
+      </div>
+      <button class="rail-btn" id="railListBtn" onclick="toggleVList()" title="Vessel list" aria-label="Toggle vessel list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span>List</span></button>
+      <button class="rail-btn" id="railDecodeBtn" onclick="toggleDecoder()" title="AIS decoder" aria-label="Open AIS decoder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg><span>Decode</span></button>
+      <span class="rail-spacer"></span>
+      <div class="rail-item">
+        <button class="rail-btn" onclick="railToggle('settingsPop')" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span>Settings</span></button>
+        <div class="rail-pop" id="settingsPop"></div>
+      </div>
+    </nav>
+
+    <!-- Vessel list (left panel) -->
+    <div id="vlist">
+      <div class="vlist-tabs" id="vlistTabs">
+        <button class="vtab on" data-tab="visible" onclick="setListTab('visible')">Visible</button>
+        <button class="vtab" data-tab="moving" onclick="setListTab('moving')">Moving</button>
+        <button class="vtab" data-tab="anchored" onclick="setListTab('anchored')">Anchored</button>
+        <button class="vtab" data-tab="aton" onclick="setListTab('aton')">AtoN</button>
+        <button class="vtab" data-tab="stale" onclick="setListTab('stale')">Stale</button>
+      </div>
+      <div id="vlistRows" class="vlist-rows"></div>
+    </div>
+
+    <!-- Ship detail card (right panel) -->
+    <div id="vcard">
+      <div class="sc-head">
+        <div class="sc-title">
+          <span id="pFlag"></span>
+          <span id="pName" class="sc-name">—</span>
+          <span id="pType" class="sc-type"></span>
+        </div>
+        <div class="sc-status"><span id="pState" class="trust-dot"></span><span id="pStatus"></span></div>
+        <button class="close btn-icon" onclick="closePanel()" title="Close" aria-label="Close vessel card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <div id="pBody" class="sc-body"></div>
+      <div id="pActions" class="sc-actions"></div>
+    </div>
+
+    <!-- Decoder panel (integrated) -->
+    <div id="decoder-panel">
+      <div class="dec-head"><h3>AIS Decoder</h3><button class="btn btn-icon" onclick="toggleDecoder()" aria-label="Close decoder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+      <div class="dec-body">
+        <textarea id="decInput" class="dec-input" rows="3" placeholder="Paste NMEA sentence(s) here…&#10;e.g. !AIVDM,1,1,,A,13u@Dt002s000000000000000000,0*23" aria-label="NMEA sentence input"></textarea>
+        <div style="display:flex;gap:var(--s2)">
+          <button class="btn btn-primary" onclick="runDecode()" style="font-size:var(--fs-sm)">Decode</button>
+          <button class="btn" onclick="decodeSelected()" style="font-size:var(--fs-sm)">Decode Selected Vessel</button>
+        </div>
+        <div id="decOutput" class="dec-output">Decoded fields will appear here.</div>
+      </div>
+    </div>
+    </div>
+
+  </div>
+
+  <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js" data-cfasync="false"></script>
+  <script src="js/app.js" data-cfasync="false"></script>
+</body>
+
+</html>
