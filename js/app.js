@@ -1934,69 +1934,29 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // INTEGRATED DECODER
+    // SPA ROUTER
     // ═══════════════════════════════════════════════════════════════
-    function toggleDecoder() {
-      const p = document.getElementById('decoder-panel');
-      p.classList.toggle('open');
-      document.getElementById('railDecodeBtn').classList.toggle('on', p.classList.contains('open'));
-      closeAllPopovers();
+    let currentView = 'map';
+    function navigate(view) {
+      if (view === currentView) return;
+      currentView = view;
+      location.hash = view === 'map' ? '' : view;
+      applyView();
     }
-
-    function runDecode() {
-      const input = document.getElementById('decInput').value.trim();
-      if (!input) return;
-      const lines = input.split('\n').map(l => l.trim()).filter(Boolean);
-      let results = [];
-      for (const line of lines) {
-        const r = decodeSentence(line);
-        if (r) results.push(r);
-      }
-      const el = document.getElementById('decOutput');
-      if (!results.length) { el.textContent = 'Could not decode. Check input format.'; return; }
-      el.innerHTML = results.map(r => {
-        return Object.entries(r).map(([k, v]) => `<div class="dec-field"><span class="dk">${esc(k)}</span><span class="dv">${esc(String(v))}</span></div>`).join('');
-      }).join('<hr style="border-color:var(--border);margin:6px 0">');
+    function applyView() {
+      const isDecoder = currentView === 'decoder';
+      document.body.classList.toggle('view-decoder', isDecoder);
+      document.getElementById('view-map').style.display = isDecoder ? 'none' : '';
+      document.getElementById('view-decoder').style.display = isDecoder ? '' : 'none';
+      document.getElementById('brandText').textContent = isDecoder ? 'HPRadar Marine › Decoder' : 'HPRadar Marine';
+      document.getElementById('railDecodeBtn')?.classList.toggle('on', isDecoder);
+      if (isDecoder && typeof decInit === 'function') decInit();
+      if (!isDecoder) map.resize();
     }
-
-    function decodeSelected() {
-      if (!selectedMmsi) { flash('No vessel selected'); return; }
-      const v = vessels.get(selectedMmsi);
-      if (!v) return;
-      const fields = { MMSI: selectedMmsi, Name: v.name || '—', Type: shipCategory(v.shiptype), SOG: v.sog, COG: v.cog, HDG: v.hdg, Lat: v.lat, Lon: v.lon, Callsign: v.callsign || '—', IMO: v.imo || '—', Destination: v.destination || '—' };
-      const el = document.getElementById('decOutput');
-      el.innerHTML = Object.entries(fields).filter(([, v]) => v !== undefined).map(([k, v]) => `<div class="dec-field"><span class="dk">${esc(k)}</span><span class="dv">${esc(String(v))}</span></div>`).join('');
-    }
-
-    function decodeSentence(line) {
-      if (!line.startsWith('!AIVDM') && !line.startsWith('!AIVDO') && !line.startsWith('!BSVDM') && !line.startsWith('!BSVDO')) return null;
-      const parts = line.split(',');
-      if (parts.length < 7) return null;
-      const total = parseInt(parts[1]);
-      if (total !== 1) return { error: 'Multi-part messages: paste all parts together' };
-      const payload = parts[5];
-      const bits = payloadToBits(payload);
-      if (bits.length < 6) return null;
-      const msgType = bitsToInt(bits, 0, 6);
-      let data = { 'Message Type': msgType };
-      switch (msgType) {
-        case 1: case 2: case 3:
-          if (bits.length >= 149) { const d = decodePosition(bits); Object.assign(data, { MMSI: d.mmsi, Status: d.status, SOG: d.sog + ' kn', Lon: d.lon.toFixed(5), Lat: d.lat.toFixed(5), COG: d.cog.toFixed(1) + '°', HDG: d.hdg < 511 ? d.hdg + '°' : 'N/A' }); }
-          break;
-        case 5:
-          if (bits.length >= 420) { const d = decodeType5(bits); Object.assign(data, { MMSI: d.mmsi, IMO: d.imo, Callsign: d.callsign, Name: d.name, 'Ship Type': d.shiptype, Destination: d.destination }); }
-          break;
-        case 18:
-          if (bits.length >= 133) { const d = decodeType18(bits); Object.assign(data, { MMSI: d.mmsi, SOG: d.sog + ' kn', Lon: d.lon.toFixed(5), Lat: d.lat.toFixed(5), COG: d.cog.toFixed(1) + '°', HDG: d.hdg < 511 ? d.hdg + '°' : 'N/A' }); }
-          break;
-        case 21:
-          if (bits.length >= 219) { const d = decodeType21(bits); Object.assign(data, { MMSI: d.mmsi, 'AtoN Type': d.atonType, Name: d.name, Lon: d.lon.toFixed(5), Lat: d.lat.toFixed(5) }); }
-          break;
-        case 24:
-          if (bits.length >= 160) { const d = decodeType24(bits); Object.assign(data, { MMSI: d.mmsi, Name: d.name, 'Ship Type': d.shiptype, Callsign: d.callsign }); }
-          break;
-        default:
-          data.Info = `Type ${msgType} — ${bits.length} bits`;
-      }
-      return data;
-    }
+    window.addEventListener('hashchange', () => {
+      currentView = location.hash === '#decoder' ? 'decoder' : 'map';
+      applyView();
+    });
+    // Init from hash on load
+    if (location.hash === '#decoder') { currentView = 'decoder'; applyView(); }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && currentView === 'decoder') navigate('map'); });

@@ -216,25 +216,6 @@
     /* Reconnecting banner */
     #ws-banner { position: fixed; top: var(--topbar-h); left: 50%; transform: translateX(-50%); z-index: 55; padding: 6px 16px; border-radius: var(--r); font-size: var(--fs-sm); font-weight: 600; background: var(--gold); color: #000; opacity: 0; transition: opacity .2s; pointer-events: none }
     #ws-banner.show { opacity: 1 }
-    /* Decoder panel */
-    #decoder-panel {
-      position: absolute; top: var(--topbar-h); left: 76px; width: 420px; max-width: calc(100vw - 90px); max-height: calc(100vh - var(--topbar-h) - 16px);
-      pointer-events: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--e2);
-      backdrop-filter: blur(10px); display: none; flex-direction: column; overflow: hidden; z-index: 25; margin-top: 8px;
-    }
-    #decoder-panel.open { display: flex }
-    .dec-head { padding: var(--s3) var(--s4); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between }
-    .dec-head h3 { font-size: var(--fs-lg); font-weight: 700; color: var(--accent) }
-    .dec-body { padding: var(--s3) var(--s4); overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: var(--s3) }
-    .dec-input { width: 100%; font-family: monospace; font-size: var(--fs-sm); padding: var(--s2) var(--s3); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r); color: var(--text); outline: none; resize: none }
-    .dec-input:focus { border-color: var(--accent) }
-    .dec-output { font-family: monospace; font-size: var(--fs-xs); color: var(--text2); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r); padding: var(--s3); max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all }
-    .dec-field { display: flex; justify-content: space-between; padding: 2px 0; font-size: var(--fs-sm) }
-    .dec-field .dk { color: var(--text3) }
-    .dec-field .dv { color: var(--text); font-weight: 600 }
-    @media(max-width:600px) {
-      #decoder-panel { left: 0; right: 0; width: 100%; max-width: 100%; top: auto; bottom: 52px; margin-top: 0; border-radius: var(--r-lg) var(--r-lg) 0 0; max-height: 60vh }
-    }
     /* Sections */
     .sc-section { padding: var(--s3) var(--s4); border-bottom: 1px solid var(--border) }
     .sc-section:last-child { border-bottom: none }
@@ -331,4 +312,88 @@
       .status-pill { padding: var(--s1); border: none; background: none; font-size: 0; gap: 0 }
       .status-pill .dot { font-size: initial }
       #sMps { display: none }
+    }
+
+    /* ═══ SPA VIEWS ═══ */
+    #view-map, #view-decoder { position: absolute; inset: 0; top: var(--topbar-h); pointer-events: auto }
+    #view-decoder { overflow: hidden }
+    body.view-decoder #map { visibility: hidden }
+    body.view-decoder #loading-skeleton { display: none }
+    #topbar-map-controls { display: contents }
+    body.view-decoder #topbar-map-controls { display: none }
+    body.view-decoder #topbar-back { display: inline-flex !important }
+    #topbar-back { align-items: center; gap: 4px; font-size: var(--fs-sm) }
+
+    /* ═══ DECODER VIEW ═══ */
+    .dec-layout { display: grid; grid-template-columns: 220px 1fr; height: 100%; overflow: hidden }
+    .dec-sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: var(--s3); display: flex; flex-direction: column; overflow: hidden }
+    .dec-sidebar-title { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--accent); margin-bottom: var(--s2) }
+    .dec-sidebar-scroll { flex: 1; overflow-y: auto; scrollbar-width: thin }
+    .dec-cat-label { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--text3); padding: 6px 0 3px; border-bottom: 1px solid var(--border); margin-bottom: 2px }
+    .dec-type-row { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: var(--r-sm); cursor: pointer; font-size: var(--fs-xs); color: var(--text2); border: 1px solid transparent; transition: all .1s }
+    .dec-type-row:hover { background: var(--surface-2); border-color: var(--border) }
+    .dec-type-row.active { background: color-mix(in srgb, var(--accent) 12%, transparent); border-color: var(--accent); color: var(--accent) }
+    .dec-type-num { font-weight: 700; font-size: 9px; background: var(--surface-3); padding: 1px 4px; border-radius: 3px; min-width: 20px; text-align: center }
+    .dec-type-row.active .dec-type-num { background: color-mix(in srgb, var(--accent) 20%, transparent) }
+
+    .dec-main { display: flex; flex-direction: column; overflow: hidden; background: var(--bg) }
+    .dec-input-panel { padding: var(--s3) var(--s4); border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0 }
+    .dec-input-row { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap }
+    .dec-nmea-input { flex: 1; min-width: 200px; font-family: monospace; font-size: var(--fs-sm); padding: var(--s2) var(--s3); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r); color: var(--accent); outline: none }
+    .dec-nmea-input:focus { border-color: var(--accent) }
+    .dec-envelope { display: flex; flex-wrap: wrap; gap: 4px; margin-top: var(--s2) }
+    .dec-env-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 3px 8px; text-align: center; min-width: 60px }
+    .dec-env-label { font-size: 8px; text-transform: uppercase; letter-spacing: .5px; color: var(--text3) }
+    .dec-env-value { font-size: var(--fs-xs); font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+    .dec-env-card.hl .dec-env-value { color: var(--accent) }
+    .dec-env-card.cs-ok .dec-env-value { color: #22c55e }
+    .dec-env-card.cs-fail .dec-env-value { color: #f87171 }
+    .dec-status-row { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s2) }
+    .dec-pill { font-size: 9px; padding: 2px 8px; border-radius: var(--r); background: var(--surface-2); border: 1px solid var(--border); color: var(--text2); font-weight: 600 }
+    .dec-pill.active { border-color: var(--accent); color: var(--accent) }
+    .dec-pill.complete { border-color: #22c55e; color: #22c55e }
+    .dec-progress { flex: 1; height: 3px; background: var(--surface-3); border-radius: 2px; overflow: hidden }
+    .dec-progress-fill { height: 100%; background: var(--accent); border-radius: 2px; width: 0%; transition: width .2s }
+    .dec-field-count { font-size: 9px; color: var(--text3) }
+
+    .dec-workspace { flex: 1; overflow: hidden; display: flex; flex-direction: column }
+    .dec-charmap { padding: var(--s2) var(--s3); border-bottom: 1px solid var(--border); background: var(--surface); display: flex; flex-wrap: wrap; gap: 3px; max-height: 80px; overflow-x: auto; flex-shrink: 0 }
+    .dec-char-cell { display: flex; flex-direction: column; align-items: center; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 2px 4px; min-width: 34px; font-family: monospace; font-size: 10px; cursor: default }
+    .dec-char-cell.consumed { opacity: .3 }
+    .dec-char-cell.field-active { background: color-mix(in srgb, var(--gold) 15%, transparent); border-color: var(--gold) }
+    .dec-cc-char { font-weight: 600; color: var(--text); font-size: 12px }
+    .dec-cc-bits { font-size: 8px; color: var(--accent); letter-spacing: .2px }
+
+    .dec-bittape-wrap { padding: var(--s2) var(--s3); border-bottom: 1px solid var(--border); background: var(--surface-2); flex-shrink: 0; display: flex; align-items: center; gap: var(--s2) }
+    .dec-bittape-label { font-size: 9px; color: var(--gold); font-weight: 600; white-space: nowrap }
+    .dec-bittape { font-family: monospace; font-size: 10px; word-break: break-all; line-height: 1.5; max-height: 50px; overflow-y: auto; flex: 1 }
+    .dec-bit-done { color: var(--text3) }
+    .dec-bit-current { background: var(--gold); color: #000; padding: 0 1px; border-radius: 2px }
+    .dec-bit-ahead { color: var(--border) }
+
+    .dec-split { display: grid; grid-template-columns: 1fr 1fr; flex: 1; min-height: 0; overflow: hidden }
+    .dec-pane { display: flex; flex-direction: column; overflow: hidden }
+    .dec-pane-right { border-left: 1px solid var(--border) }
+    .dec-pane-head { padding: var(--s2) var(--s3); border-bottom: 1px solid var(--border); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text3); background: var(--surface); display: flex; justify-content: space-between; align-items: center }
+    .dec-pane-body { flex: 1; overflow-y: auto; padding: var(--s2) var(--s3) }
+    .dec-json { flex: 1; overflow: auto; padding: var(--s3); font-family: monospace; font-size: var(--fs-xs); color: var(--text2); white-space: pre; margin: 0; background: var(--surface-2); border: none }
+    .dec-empty { text-align: center; color: var(--text3); font-size: var(--fs-sm); padding: var(--s5) }
+
+    .dec-field-card { padding: 5px 8px; margin-bottom: 4px; background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--r-sm); font-size: var(--fs-xs); animation: slideIn .1s ease }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(-4px) } to { opacity: 1; transform: translateX(0) } }
+    .dec-fc-top { display: flex; justify-content: space-between; gap: 4px }
+    .dec-fc-name { font-weight: 600; color: var(--gold) }
+    .dec-fc-len { color: var(--text3); font-size: 9px }
+    .dec-fc-value { font-weight: 600; color: var(--text) }
+    .dec-fc-bits { font-size: 9px; color: var(--text3); font-family: monospace; word-break: break-all }
+    .dec-copy-btn { font-size: 8px; padding: 1px 6px; border: 1px solid var(--border); border-radius: var(--r-sm); background: none; color: var(--text3); cursor: pointer; font-weight: 600 }
+    .dec-copy-btn:hover { border-color: var(--accent); color: var(--accent) }
+
+    .json-key { color: var(--accent) } .json-str { color: #22c55e } .json-num { color: #f87171 }
+
+    @media(max-width:600px) {
+      .dec-layout { grid-template-columns: 1fr }
+      .dec-sidebar { display: none }
+      .dec-split { grid-template-columns: 1fr }
+      .dec-pane-right { border-left: none; border-top: 1px solid var(--border) }
     }
