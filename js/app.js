@@ -1859,15 +1859,15 @@
     // Vessel photo: type-based fallback (MMSI/Wiki disabled for now)
     const photoCache = new Map();
     const TYPE_PHOTOS = {
-      cargo:['Cargo vessel'],tanker:['Tanker'],passenger:['Passenger'],
-      fishing:['Fishing vessel','Fishing vessel 2','Fishing vessel 3'],
-      tug:['Tug','Tug 1'],sailing:['Pleasure craft 0','Pleasure craft 1','Pleasure craft 2','Pleasure craft 3','Pleasure craft 4','Pleasure craft 5'],
-      pilot:['Pilot vessel'],hsc:['High speed craft'],
-      pleasure:['Pleasure craft 00','Pleasure craft 1','Pleasure craft 2'],
-      sar:['Search and rescue'],law:['Law enforcement'],
-      medical:['Medical transport','Medical transport 1','Medical transport 2'],
-      military:['Military'],dive:['Dive vessel'],dredging:['Dredging or underwater ops'],
-      unknown:['Other vessel type'],
+      cargo:['Cargo-vessel'],tanker:['Tanker'],passenger:['Passenger'],
+      fishing:['Fishing-vessel','Fishing-vessel-2','Fishing-vessel-3'],
+      tug:['Tug','Tug-1'],sailing:['Pleasure-craft-0','Pleasure-craft-1','Pleasure-craft-2','Pleasure-craft-3','Pleasure-craft-4','Pleasure-craft-5'],
+      pilot:['Pilot-vessel'],hsc:['High-speed-craft'],
+      pleasure:['Pleasure-craft-00','Pleasure-craft-1','Pleasure-craft-2'],
+      sar:['Search-and-rescue'],law:['Law-enforcement'],
+      medical:['Medical-transport','Medical-transport-1','Medical-transport-2'],
+      military:['Military'],dive:['Dive-vessel'],dredging:['Dredging-or-underwater-ops'],
+      unknown:['Other-vessel-type'],
     };
     function typePhotoUrl(shiptype) {
       const cat = shipCategory(shiptype);
@@ -1880,7 +1880,7 @@
       if (!el) return;
       if (photoCache.has(mmsi)) { el.innerHTML = `<img src="${photoCache.get(mmsi)}" alt="" loading="lazy">`; return; }
       const v = vessels.get(mmsi);
-      const url = v ? typePhotoUrl(v.shiptype) : 'photos/Other vessel type.png';
+      const url = v ? typePhotoUrl(v.shiptype) : 'photos/Other-vessel-type.png';
       photoCache.set(mmsi, url);
       el.innerHTML = `<img src="${url}" alt="" loading="lazy">`;
     }
