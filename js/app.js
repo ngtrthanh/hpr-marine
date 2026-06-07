@@ -1526,19 +1526,27 @@
         if (dv.byteLength < 24) return;
         const lonRaw = dv.getInt32(0, true);
         const latRaw = dv.getInt32(4, true);
-        const lon = lonRaw / 1000 / 60; // minutes*0.001 → degrees
+        const lon = lonRaw / 1000 / 60;
         const lat = latRaw / 1000 / 60;
         if (lon < -180 || lon > 180 || lat < -90 || lat > 90) return;
+        const wspeed = dv.getUint8(11);
+        const wdir = dv.getUint16(13, true);
+        const airtemp = dv.getInt16(15, true);
+        const humidity = dv.getUint8(17);
+        const pressure = dv.getUint16(18, true);
+        const wlRaw = dv.getInt16(20, true);
         stations.set(mmsi, {
           lon, lat,
           day: dv.getUint8(8), hour: dv.getUint8(9), min: dv.getUint8(10),
-          wspeed: dv.getUint8(11), wgust: dv.getUint8(12),
-          wdir: dv.getUint16(13, true),
-          temp: dv.getInt16(15, true) / 10,
-          humidity: dv.getUint8(17),
-          pressure: dv.getUint16(18, true),
-          waveHeight: dv.getUint8(22) / 10,
-          seaState: dv.getUint8(23),
+          wspeed: wspeed < 127 ? wspeed : null,
+          wgust: dv.getUint8(12) < 127 ? dv.getUint8(12) : null,
+          wdir: wdir < 360 ? wdir : null,
+          temp: airtemp > -1024 ? airtemp / 10 : null,
+          humidity: humidity <= 100 ? humidity : null,
+          pressure: pressure < 511 ? pressure : null,
+          waterLevel: wlRaw > 0 && wlRaw < 4001 ? (wlRaw - 1000) / 100 : null,
+          waveHeight: dv.getUint8(22) < 251 ? dv.getUint8(22) / 10 : null,
+          seaState: dv.getUint8(23) < 13 ? dv.getUint8(23) : null,
           ts: Date.now(), mmsi
         });
         renderStations();
