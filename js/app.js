@@ -1835,7 +1835,11 @@
       pleasure:'Pleasure-craft-00',sar:'Search-and-rescue',law:'Law-enforcement',
       medical:'Medical-transport',military:'Military',dive:'Dive-vessel',
       dredging:'Dredging-or-underwater-ops',platform:'Platform',unknown:'Other-vessel-type',
-      lighthouse:'Platform',lightvessel:'Platform',buoy:'Platform',beacon:'Platform',platform_aton:'Platform',
+    };
+    const ATON_FALLBACK_SVG = {
+      lighthouse:'light',lightvessel:'light_vessellanbyrigs',
+      buoy:'starboard_hand_lateral_mark_buoy',beacon:'beacon_safe_water',
+      platform_aton:'fixed_structures_off_shore_such_as_oil_platforms_wind_farms_note_1_this_code_should_identify_an_obstruction_that_is_fitted_with_an_aton_ais_station',
     };
     function fetchVesselPhoto(imo, mmsi) {
       const el = document.getElementById('pPhoto');
@@ -1843,18 +1847,24 @@
       const cached = photoCache.get(mmsi);
       if (cached) { el.innerHTML = cached; return; }
       const v = vessels.get(mmsi);
-      let url;
+      let html;
       const pick = arr => arr[Math.floor(Math.random()*arr.length)];
       if (v && v.isAton) {
         const cat = atonPhotoCategory(v.atonType||0);
         const p = atonPhotos[cat];
-        url = p&&p.length ? pick(p) : `./photos/${FALLBACK_PREFIX[cat]||'Other-vessel-type'}.jpg`;
+        if (p&&p.length) {
+          const url = pick(p);
+          html = `<img src="${url}" alt="" loading="lazy"><span class="photo-disclaimer">Illustration only</span>`;
+        } else {
+          const svg = ATON_FALLBACK_SVG[cat]||'default_type_of_aton_not_specified';
+          html = `<div style="display:flex;align-items:center;justify-content:center;height:100%;background:var(--surface2,#1e293b);border-radius:var(--r)"><img src="./icons/${svg}.svg" alt="" style="width:64px;height:64px;opacity:.7"></div>`;
+        }
       } else {
         const cat = shipCategory(v?.shiptype);
         const p = typePhotos[cat];
-        url = p&&p.length ? pick(p) : `./photos/${FALLBACK_PREFIX[cat]||'Other-vessel-type'}.jpg`;
+        const url = p&&p.length ? pick(p) : `./photos/${FALLBACK_PREFIX[cat]||'Other-vessel-type'}.jpg`;
+        html = `<img src="${url}" alt="" loading="lazy"><span class="photo-disclaimer">Illustration only</span>`;
       }
-      const html = `<img src="${url}" alt="" loading="lazy"><span class="photo-disclaimer">Illustration only</span>`;
       if (photoIndexReady) photoCache.set(mmsi, html);
       el.innerHTML = html;
     }
