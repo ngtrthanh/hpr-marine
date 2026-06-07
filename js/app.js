@@ -1507,40 +1507,7 @@
       }
     }
 
-    // Poll AIS-catcher binmsgs.json endpoints for met/hydro data (multi-part type 8)
-    const BINMSG_ENDPOINTS = [
-      'https://m3.hpradar.com/api/binmsgs.json',
-      'https://aisinfra.hpradar.com/api/binmsgs.json'
-    ];
-    function pollBinMsgs() {
-      for (const url of BINMSG_ENDPOINTS) {
-        fetch(url).then(r => r.json()).then(data => {
-          const msgs = Array.isArray(data) ? data : (data.messages || []);
-          for (const m of msgs) {
-            if (m.dac !== 1 || m.fi !== 31) continue;
-            const msg = m.message;
-            if (!msg || !msg.lon || !msg.lat) continue;
-            stations.set(msg.mmsi, {
-              lon: msg.lon, lat: msg.lat,
-              day: msg.day, hour: msg.hour, min: msg.minute,
-              wspeed: msg.wspeed ?? 0, wgust: msg.wgust ?? 0,
-              wdir: msg.wdir ?? 0,
-              temp: msg.airtemp ?? msg.temperature ?? 0,
-              humidity: msg.humidity ?? 0,
-              pressure: msg.pressure ?? 0,
-              waveHeight: msg.waveheight ?? 0,
-              seaState: msg.seastate ?? 0,
-              waterLevel: msg.waterlevel ?? null,
-              ts: (m.timestamp || msg.rxuxtime) * 1000, mmsi: msg.mmsi,
-              country: msg.country
-            });
-          }
-          renderStations();
-        }).catch(() => {});
-      }
-    }
-    pollBinMsgs();
-    setInterval(pollBinMsgs, 180000); // refresh every 3 min
+
 
     function renderStations() {
       const src = map.getSource('wx-stations');
