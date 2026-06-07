@@ -1857,34 +1857,46 @@
     }
 
     // Vessel photo from Wikimedia Commons (by IMO)
-    const photoCache = new Map(); // imo → url|null
+    const photoCache = new Map(); // mmsi → url|null
     async function fetchVesselPhoto(imo, mmsi) {
       const el = document.getElementById('pPhoto');
       if (!el) return;
-      if (!imo) { el.innerHTML = ''; el.style.display = 'none'; return; }
+      if (!mmsi) { el.innerHTML = ''; el.style.display = 'none'; return; }
       el.style.display = '';
-      if (photoCache.has(imo)) {
-        const url = photoCache.get(imo);
+      if (photoCache.has(mmsi)) {
+        const url = photoCache.get(mmsi);
         el.innerHTML = url ? `<img src="${url}" alt="Vessel photo" loading="lazy">` : '';
         if (!url) el.style.display = 'none';
         return;
       }
       el.innerHTML = '<div class="sc-photo-skeleton"></div>';
       try {
+        // Try local photo first (photos/MMSI.jpg)
+        const localUrl = `photos/${mmsi}.jpg`;
+        const lr = await fetch(localUrl, { method: 'HEAD' });
+        if (lr.ok) {
+          photoCache.set(mmsi, localUrl);
+          if (selectedMmsi === mmsi) el.innerHTML = `<img src="${localUrl}" alt="Vessel photo" loading="lazy">`;
+          return;
+        }
+      } catch {}
+      // Fallback: Wikimedia Commons by IMO
+      if (!imo) { photoCache.set(mmsi, null); el.innerHTML = ''; el.style.display = 'none'; return; }
+      try {
         const base = 'https://commons.wikimedia.org/w/api.php';
         const r = await fetch(`${base}?action=query&list=categorymembers&cmtype=file&cmtitle=Category:IMO_${imo}&format=json&origin=*`);
         const d = await r.json();
         const members = d.query?.categorymembers;
-        if (!members?.length) { photoCache.set(imo, null); el.innerHTML = ''; el.style.display = 'none'; return; }
+        if (!members?.length) { photoCache.set(mmsi, null); el.innerHTML = ''; el.style.display = 'none'; return; }
         const r2 = await fetch(`${base}?action=query&titles=${encodeURIComponent(members[0].title)}&prop=imageinfo&iiprop=url&iiurlwidth=640&format=json&origin=*`);
         const d2 = await r2.json();
         const url = Object.values(d2.query.pages)[0]?.imageinfo?.[0]?.thumburl || null;
-        photoCache.set(imo, url);
+        photoCache.set(mmsi, url);
         if (document.getElementById('pPhoto') && selectedMmsi === mmsi) {
           el.innerHTML = url ? `<img src="${url}" alt="Vessel photo" loading="lazy">` : '';
           if (!url) el.style.display = 'none';
         }
-      } catch { photoCache.set(imo, null); el.innerHTML = ''; el.style.display = 'none'; }
+      } catch { photoCache.set(mmsi, null); el.innerHTML = ''; el.style.display = 'none'; }
     }
 
     // ═══════════════════════════════════════════════════════════════
