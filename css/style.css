@@ -399,11 +399,12 @@
     }
 
     /* ═══ WEATHER STATION POPUP ═══ */
-    .wx-popup { font-family: 'Inter', sans-serif }
-    .wx-title { font-size: 13px; font-weight: 700; color: var(--accent, #00e5ff); margin-bottom: 2px }
-    .wx-mmsi { font-size: 10px; color: var(--text3, #64748b); margin-bottom: 8px }
-    .wx-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px }
-    .wx-item { text-align: center }
-    .wx-val { display: block; font-size: 14px; font-weight: 700; color: var(--text, #0f172a) }
-    .wx-label { font-size: 9px; color: var(--text3, #64748b); text-transform: uppercase; letter-spacing: .3px }
-    .wx-age { font-size: 9px; color: var(--text3, #64748b); margin-top: 6px; text-align: right }
+    .wx-popup { font-family: 'Inter', sans-serif; font-size: 12px }
+    .wx-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px }
+    .wx-type { font-weight: 700; color: var(--accent, #0284c7) }
+    .wx-time { font-size: 10px; color: var(--text3, #64748b) }
+    .wx-mmsi { font-size: 10px; color: var(--text3, #64748b); margin-bottom: 6px; border-bottom: 1px solid var(--border, #e2e8f0); padding-bottom: 5px }
+    .wx-row { padding: 2px 0; line-height: 1.6 }
+    .wx-val { font-size: 15px; font-weight: 700; color: var(--text, #0f172a) }
+    .wx-unit { font-size: 11px; color: var(--text3, #64748b); margin-right: 4px }
+    .wx-dim { font-size: 11px; color: var(--text3, #64748b) }

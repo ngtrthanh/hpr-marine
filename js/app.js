@@ -1603,11 +1603,12 @@
       if (!src) return;
       const features = [];
       for (const [mmsi, s] of stations) {
-        if (Date.now() - s.ts > 3600000) continue; // stale > 1h
+        if (Date.now() - s.ts > 3600000) continue;
+        const label = s.wspeed != null ? s.wspeed + 'kn' : s.waterLevel != null ? s.waterLevel.toFixed(1) + 'm' : '';
         features.push({
           type: 'Feature',
           geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
-          properties: { mmsi, wspeed: s.wspeed, wdir: s.wdir, temp: s.temp }
+          properties: { mmsi, label }
         });
       }
       src.setData({ type: 'FeatureCollection', features });
@@ -1647,7 +1648,7 @@
           'icon-image': 'wx-rose',
           'icon-size': ['interpolate', ['linear'], ['zoom'], 3, 0.3, 8, 0.5, 12, 0.7],
           'icon-allow-overlap': true,
-          'text-field': ['concat', ['get', 'wspeed'], 'kn'],
+          'text-field': ['get', 'label'],
           'text-size': 9, 'text-offset': [0, 1.4], 'text-anchor': 'top',
           'text-font': ['Noto Sans Medium']
         },
@@ -1662,8 +1663,20 @@
         if (!s) return;
         showStationPopup(s);
       });
-      map.on('mouseenter', 'wx-station-symbol', () => map.getCanvas().style.cursor = 'pointer');
-      map.on('mouseleave', 'wx-station-symbol', () => map.getCanvas().style.cursor = '');
+      map.on('mouseenter', 'wx-station-symbol', e => {
+        map.getCanvas().style.cursor = 'pointer';
+        if (!e.features?.length) return;
+        const mmsi = e.features[0].properties.mmsi;
+        const s = stations.get(mmsi);
+        if (!s) return;
+        const label = s.wspeed != null ? `${s.wspeed}kn` : s.waterLevel != null ? `WL ${s.waterLevel.toFixed(1)}m` : '';
+        const type = stationType(s);
+        popup.setLngLat([s.lon, s.lat]).setHTML(
+          `<div class="pop-title">${type}</div>` +
+          (label ? `<div class="pop-row"><span class="v">${label}</span></div>` : '')
+        ).addTo(map);
+      });
+      map.on('mouseleave', 'wx-station-symbol', () => { map.getCanvas().style.cursor = ''; popup.remove(); });
 
       // Register wind rose icon
       const roseImg = new Image();
@@ -1676,25 +1689,53 @@
       roseImg.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="%2300e5ff" stroke-width="2"><circle cx="32" cy="32" r="20" opacity="0.3" fill="%2300e5ff"/><circle cx="32" cy="32" r="20"/><path d="M32 12v8M32 44v8M12 32h8M44 32h8" stroke-width="2.5"/><path d="M18 18l6 6M40 40l6 6M18 46l6-6M40 24l6-6" stroke-width="1.5" opacity="0.6"/><circle cx="32" cy="32" r="3" fill="%2300e5ff"/></svg>');
     }
 
+    function stationType(s) {
+      const hasWind = s.wspeed != null;
+      const hasHydro = s.waterLevel != null;
+      if (hasWind && hasHydro) return 'Met-Hydro';
+      if (hasWind) return 'Met Station';
+      if (hasHydro) return 'Tide Gauge';
+      return 'AIS Station';
+    }
+
     function showStationPopup(s) {
-      const v = x => x != null && x !== 0 ? x : '—';
-      const wl = s.waterLevel != null ? `<div class="wx-item"><span class="wx-val">${s.waterLevel.toFixed(2)}m</span><span class="wx-label">Water Lv</span></div>` : '';
+      const type = stationType(s);
+      const sections = [];
+
+      // Wind section
+      if (s.wspeed != null || s.wgust != null) {
+        let wind = '';
+        if (s.wspeed != null) wind += `<span class="wx-val">${s.wspeed}</span><span class="wx-unit">kn</span>`;
+        if (s.wgust != null) wind += ` <span class="wx-dim">gust</span> <span class="wx-val">${s.wgust}</span><span class="wx-unit">kn</span>`;
+        if (s.wdir != null) wind += ` <span class="wx-dim">from</span> <span class="wx-val">${s.wdir}°</span>`;
+        sections.push(`<div class="wx-row">${wind}</div>`);
+      }
+
+      // Conditions
+      const conds = [];
+      if (s.temp != null) conds.push(`${s.temp.toFixed(1)}°C`);
+      if (s.pressure != null) conds.push(`${s.pressure} hPa`);
+      if (s.humidity != null) conds.push(`${s.humidity}%`);
+      if (conds.length) sections.push(`<div class="wx-row wx-dim">${conds.join(' · ')}</div>`);
+
+      // Sea state
+      const sea = [];
+      if (s.waveHeight != null) sea.push(`Waves ${s.waveHeight}m`);
+      if (s.seaState != null) sea.push(`Bf ${s.seaState}`);
+      if (sea.length) sections.push(`<div class="wx-row wx-dim">${sea.join(' · ')}</div>`);
+
+      // Water level
+      if (s.waterLevel != null) {
+        sections.push(`<div class="wx-row"><span class="wx-val">${s.waterLevel.toFixed(2)}</span><span class="wx-unit">m</span> <span class="wx-dim">water level</span></div>`);
+      }
+
+      const time = s.hour != null ? `${String(s.hour).padStart(2,'0')}:${String(s.min).padStart(2,'0')} UTC` : fmtAge(s.ts);
       const html = `<div class="wx-popup">
-        <div class="wx-title">⚓ Weather Station</div>
-        <div class="wx-mmsi">${s.country || ''} · MMSI ${s.mmsi}</div>
-        <div class="wx-grid">
-          <div class="wx-item"><span class="wx-val">${v(s.wspeed)}</span><span class="wx-label">Wind kn</span></div>
-          <div class="wx-item"><span class="wx-val">${v(s.wgust)}</span><span class="wx-label">Gust kn</span></div>
-          <div class="wx-item"><span class="wx-val">${s.wdir != null ? s.wdir+'°' : '—'}</span><span class="wx-label">Dir</span></div>
-          <div class="wx-item"><span class="wx-val">${s.temp != null ? s.temp.toFixed(1)+'°' : '—'}</span><span class="wx-label">Temp</span></div>
-          <div class="wx-item"><span class="wx-val">${s.pressure != null ? s.pressure : '—'}</span><span class="wx-label">hPa</span></div>
-          <div class="wx-item"><span class="wx-val">${s.humidity != null ? s.humidity+'%' : '—'}</span><span class="wx-label">Humid</span></div>
-          <div class="wx-item"><span class="wx-val">${s.waveHeight != null ? s.waveHeight+'m' : '—'}</span><span class="wx-label">Waves</span></div>
-          ${wl}
-        </div>
-        <div class="wx-age">${s.hour != null ? String(s.hour).padStart(2,'0')+':'+String(s.min).padStart(2,'0')+' UTC' : fmtAge(s.ts)}</div>
+        <div class="wx-head"><span class="wx-type">${type}</span><span class="wx-time">${time}</span></div>
+        <div class="wx-mmsi">${s.country ? s.country+' · ' : ''}${s.mmsi}</div>
+        ${sections.join('')}
       </div>`;
-      new maplibregl.Popup({ maxWidth: '280px' }).setLngLat([s.lon, s.lat]).setHTML(html).addTo(map);
+      new maplibregl.Popup({ maxWidth: '240px' }).setLngLat([s.lon, s.lat]).setHTML(html).addTo(map);
     }
 
     function updateStats() {
