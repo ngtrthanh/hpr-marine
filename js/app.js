@@ -623,6 +623,16 @@
           const name = decodeFixedStr(buf, off + 14, 20);
           updateVessel({ mmsi, atonType, name, lon, lat, isAton: true });
           off += 34;
+        } else if (ft === 0x08 && off + 12 <= buf.byteLength) {
+          // Binary message frame: [0x08][mmsi:4][dac:2][fid:1][len:2][subtype:1][spare:1][payload:N]
+          const mmsi = view.getUint32(off + 1, true);
+          const dac = view.getUint16(off + 5, true);
+          const fid = view.getUint8(off + 7);
+          const dataLen = view.getUint16(off + 8, true);
+          const subtype = view.getUint8(off + 10);
+          if (off + 12 + dataLen > buf.byteLength) break;
+          handleBinaryFrame(mmsi, dac, fid, subtype, new DataView(buf, off + 12, dataLen));
+          off += 12 + dataLen;
         } else {
           break; // unknown frame or truncated
         }
@@ -764,7 +774,7 @@
       localStorage.setItem('aiscopeStyle', name);
       map.setStyle(getMapStyle(name));
       buildMapMenu();
-      map.once('style.load', () => { addVesselLayers(); if (weatherOn) loadWeatherFrame(); });
+      map.once('style.load', () => { addVesselLayers(); addStationLayers(); if (weatherOn) loadWeatherFrame(); });
     }
 
     function addVesselLayers() {
@@ -928,6 +938,7 @@
     // ═══════════════════════════════════════════════════════════════
     map.on('load', () => {
       addVesselLayers();
+      addStationLayers();
 
       // Click handler
       map.on('click', 'vessels-circle', onVesselClick);
@@ -1501,6 +1512,145 @@
         const hs = map.getSource('hulls'); if (hs) hs.setData({ type:'FeatureCollection', features:[] });
         const as = map.getSource('antennas'); if (as) as.setData({ type:'FeatureCollection', features:[] });
       }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // WEATHER STATIONS (binary message types 6/8, IMO236/289)
+    // ═══════════════════════════════════════════════════════════════
+    const stations = new Map(); // mmsi → {lon, lat, wspeed, wgust, wdir, temp, pressure, humidity, waveHeight, seaState, ts}
+    const areaNotices = []; // [{lon, lat, notice, duration, ts}]
+
+    function handleBinaryFrame(mmsi, dac, fid, subtype, dv) {
+      if (subtype === 0x01 || subtype === 0x02) {
+        // Met/Hydro — 24 bytes
+        if (dv.byteLength < 24) return;
+        const lonRaw = dv.getInt32(0, true);
+        const latRaw = dv.getInt32(4, true);
+        const lon = lonRaw / 1000 / 60; // minutes*0.001 → degrees
+        const lat = latRaw / 1000 / 60;
+        if (lon < -180 || lon > 180 || lat < -90 || lat > 90) return;
+        stations.set(mmsi, {
+          lon, lat,
+          day: dv.getUint8(8), hour: dv.getUint8(9), min: dv.getUint8(10),
+          wspeed: dv.getUint8(11), wgust: dv.getUint8(12),
+          wdir: dv.getUint16(13, true),
+          temp: dv.getInt16(15, true) / 10,
+          humidity: dv.getUint8(17),
+          pressure: dv.getUint16(18, true),
+          waveHeight: dv.getUint8(22) / 10,
+          seaState: dv.getUint8(23),
+          ts: Date.now(), mmsi
+        });
+        renderStations();
+      } else if (subtype === 0x03) {
+        // Area Notice — 18 bytes
+        if (dv.byteLength < 18) return;
+        const notice = dv.getUint8(2);
+        const lon = dv.getInt32(10, true) / 1000 / 60;
+        const lat = dv.getInt32(14, true) / 1000 / 60;
+        if (lon === 0 && lat === 0) return;
+        areaNotices.push({ lon, lat, notice, mmsi, ts: Date.now() });
+        if (areaNotices.length > 50) areaNotices.shift();
+        renderAreaNotices();
+      }
+    }
+
+    function renderStations() {
+      const src = map.getSource('wx-stations');
+      if (!src) return;
+      const features = [];
+      for (const [mmsi, s] of stations) {
+        if (Date.now() - s.ts > 3600000) continue; // stale > 1h
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
+          properties: { mmsi, wspeed: s.wspeed, wdir: s.wdir, temp: s.temp }
+        });
+      }
+      src.setData({ type: 'FeatureCollection', features });
+      document.getElementById('sStations').textContent = features.length;
+    }
+
+    function renderAreaNotices() {
+      const src = map.getSource('area-notices');
+      if (!src) return;
+      const features = [];
+      const now = Date.now();
+      for (const n of areaNotices) {
+        if (now - n.ts > 3600000) continue;
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [n.lon, n.lat] },
+          properties: { notice: n.notice, mmsi: n.mmsi }
+        });
+      }
+      src.setData({ type: 'FeatureCollection', features });
+    }
+
+    function addStationLayers() {
+      map.addSource('wx-stations', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('area-notices', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+
+      // Area notice circles (orange, semi-transparent)
+      map.addLayer({
+        id: 'area-notice-circle', type: 'circle', source: 'area-notices',
+        paint: { 'circle-radius': 12, 'circle-color': '#f59e0b', 'circle-opacity': 0.4, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#f59e0b' }
+      });
+
+      // Weather station markers (wind rose icon)
+      map.addLayer({
+        id: 'wx-station-symbol', type: 'symbol', source: 'wx-stations',
+        layout: {
+          'icon-image': 'wx-rose',
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 3, 0.3, 8, 0.5, 12, 0.7],
+          'icon-allow-overlap': true,
+          'text-field': ['concat', ['get', 'wspeed'], 'kn'],
+          'text-size': 9, 'text-offset': [0, 1.4], 'text-anchor': 'top',
+          'text-font': ['Noto Sans Medium']
+        },
+        paint: { 'text-color': '#00e5ff', 'text-halo-color': '#000', 'text-halo-width': 1 }
+      });
+
+      // Click handler for stations
+      map.on('click', 'wx-station-symbol', e => {
+        if (!e.features?.length) return;
+        const mmsi = e.features[0].properties.mmsi;
+        const s = stations.get(mmsi);
+        if (!s) return;
+        showStationPopup(s);
+      });
+      map.on('mouseenter', 'wx-station-symbol', () => map.getCanvas().style.cursor = 'pointer');
+      map.on('mouseleave', 'wx-station-symbol', () => map.getCanvas().style.cursor = '');
+
+      // Register wind rose icon
+      const roseImg = new Image();
+      roseImg.onload = () => {
+        const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+        const ctx = c.getContext('2d'); ctx.drawImage(roseImg, 0, 0, 64, 64);
+        if (!map.hasImage('wx-rose')) map.addImage('wx-rose', ctx.getImageData(0, 0, 64, 64), { pixelRatio: 2 });
+      };
+      // Inline wind rose SVG as data URL
+      roseImg.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="%2300e5ff" stroke-width="2"><circle cx="32" cy="32" r="20" opacity="0.3" fill="%2300e5ff"/><circle cx="32" cy="32" r="20"/><path d="M32 12v8M32 44v8M12 32h8M44 32h8" stroke-width="2.5"/><path d="M18 18l6 6M40 40l6 6M18 46l6-6M40 24l6-6" stroke-width="1.5" opacity="0.6"/><circle cx="32" cy="32" r="3" fill="%2300e5ff"/></svg>');
+    }
+
+    function showStationPopup(s) {
+      const beaufort = ['Calm','Light air','Light breeze','Gentle breeze','Moderate','Fresh','Strong','Near gale','Gale','Strong gale','Storm','Violent storm','Hurricane'];
+      const html = `<div class="wx-popup">
+        <div class="wx-title">Weather Station</div>
+        <div class="wx-mmsi">MMSI ${s.mmsi}</div>
+        <div class="wx-grid">
+          <div class="wx-item"><span class="wx-val">${s.wspeed}</span><span class="wx-label">Wind kn</span></div>
+          <div class="wx-item"><span class="wx-val">${s.wgust}</span><span class="wx-label">Gust kn</span></div>
+          <div class="wx-item"><span class="wx-val">${s.wdir}°</span><span class="wx-label">Dir</span></div>
+          <div class="wx-item"><span class="wx-val">${s.temp.toFixed(1)}°</span><span class="wx-label">Temp</span></div>
+          <div class="wx-item"><span class="wx-val">${s.pressure}</span><span class="wx-label">hPa</span></div>
+          <div class="wx-item"><span class="wx-val">${s.humidity}%</span><span class="wx-label">Humidity</span></div>
+          <div class="wx-item"><span class="wx-val">${s.waveHeight}m</span><span class="wx-label">Waves</span></div>
+          <div class="wx-item"><span class="wx-val">${beaufort[s.seaState] || s.seaState}</span><span class="wx-label">Sea</span></div>
+        </div>
+        <div class="wx-age">${fmtAge(s.ts)}</div>
+      </div>`;
+      new maplibregl.Popup({ maxWidth: '260px' }).setLngLat([s.lon, s.lat]).setHTML(html).addTo(map);
     }
 
     function updateStats() {
