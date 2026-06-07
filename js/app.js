@@ -1839,11 +1839,12 @@
       const pick = arr => arr[Math.floor(Math.random()*arr.length)];
       if (v && v.isAton) {
         const p = atonPhotos[atonPhotoCategory(v.atonType||0)];
-        url = p&&p.length ? pick(p) : `${PHOTO_CDN}/Buoy-0.jpg`;
+        url = p&&p.length ? pick(p) : null;
       } else {
         const p = typePhotos[shipCategory(v?.shiptype)];
-        url = p&&p.length ? pick(p) : `${PHOTO_CDN}/Other-vessel-type-1.jpg`;
+        url = p&&p.length ? pick(p) : null;
       }
+      if (!url) { el.innerHTML = '<div class="sc-photo-skeleton"></div>'; return; }
       const html = `<img src="${url}" alt="" loading="lazy"><span class="photo-disclaimer">Illustration only</span>`;
       if (photoIndexReady) photoCache.set(mmsi, html);
       el.innerHTML = html;
