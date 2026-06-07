@@ -1829,6 +1829,14 @@
       if (t===3) return 'platform_aton';
       return 'buoy';
     }
+    const FALLBACK_PREFIX = {
+      cargo:'Cargo-vessel',tanker:'Tanker',passenger:'Passenger',fishing:'Fishing-vessel',
+      tug:'Tug',pilot:'Pilot-vessel',hsc:'High-speed-craft',sailing:'Pleasure-craft-0',
+      pleasure:'Pleasure-craft-00',sar:'Search-and-rescue',law:'Law-enforcement',
+      medical:'Medical-transport',military:'Military',dive:'Dive-vessel',
+      dredging:'Dredging-or-underwater-ops',platform:'Platform',unknown:'Other-vessel-type',
+      lighthouse:'Platform',lightvessel:'Platform',buoy:'Platform',beacon:'Platform',platform_aton:'Platform',
+    };
     function fetchVesselPhoto(imo, mmsi) {
       const el = document.getElementById('pPhoto');
       if (!el) return;
@@ -1838,13 +1846,14 @@
       let url;
       const pick = arr => arr[Math.floor(Math.random()*arr.length)];
       if (v && v.isAton) {
-        const p = atonPhotos[atonPhotoCategory(v.atonType||0)];
-        url = p&&p.length ? pick(p) : null;
+        const cat = atonPhotoCategory(v.atonType||0);
+        const p = atonPhotos[cat];
+        url = p&&p.length ? pick(p) : `./photos/${FALLBACK_PREFIX[cat]||'Other-vessel-type'}.jpg`;
       } else {
-        const p = typePhotos[shipCategory(v?.shiptype)];
-        url = p&&p.length ? pick(p) : null;
+        const cat = shipCategory(v?.shiptype);
+        const p = typePhotos[cat];
+        url = p&&p.length ? pick(p) : `./photos/${FALLBACK_PREFIX[cat]||'Other-vessel-type'}.jpg`;
       }
-      if (!url) { el.innerHTML = '<div class="sc-photo-skeleton"></div>'; return; }
       const html = `<img src="${url}" alt="" loading="lazy"><span class="photo-disclaimer">Illustration only</span>`;
       if (photoIndexReady) photoCache.set(mmsi, html);
       el.innerHTML = html;
