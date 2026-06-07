@@ -1806,6 +1806,7 @@
       ['Dredging-or-underwater-ops','type','dredging'],['Platform','type','platform'],
       ['Other-vessel-type','type','unknown'],['Pleasure-craft','type','sailing'],
     ];
+    let photoIndexReady = false;
     fetch(`${PHOTO_CDN}/photos-index.txt`).then(r=>r.text()).then(txt=>{
       for (const line of txt.split('\n')) {
         const file = line.trim();
@@ -1818,7 +1819,8 @@
           }
         }
       }
-    }).catch(()=>{});
+      photoIndexReady = true;
+    }).catch(()=>{ photoIndexReady = true; });
     function atonPhotoCategory(t) {
       if (t>=4&&t<=7||t>=22&&t<=23) return 'lighthouse';
       if (t>=8&&t<=12) return 'lightvessel';
@@ -1843,7 +1845,7 @@
         url = p&&p.length ? pick(p) : `${PHOTO_CDN}/Other-vessel-type-1.jpg`;
       }
       const html = `<img src="${url}" alt="" loading="lazy"><span class="photo-disclaimer">Illustration only</span>`;
-      photoCache.set(mmsi, html);
+      if (photoIndexReady) photoCache.set(mmsi, html);
       el.innerHTML = html;
     }
 
