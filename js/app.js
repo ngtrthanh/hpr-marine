@@ -29,7 +29,7 @@
       el.textContent = val ?? '';
       return el.innerHTML;
     }
-    const STALE_MS = 600000; // 10 min → remove vessel
+    const STALE_MS = 86400000; // 24h → remove vessel (matches MarineTraffic)
     // Source trust age states (Phase 5 shares this)
     function ageState(ts) {
       const a = (Date.now() - ts) / 1000; // seconds
