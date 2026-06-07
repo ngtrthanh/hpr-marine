@@ -1067,25 +1067,35 @@
     ];
     function renderChips() {
       const box = document.getElementById('chips');
-      // Count vessels per category
       const counts = {};
       for (const v of vessels.values()) {
         const cat = v.isAton ? 'aton' : shipCategory(v.shiptype);
         counts[cat] = (counts[cat] || 0) + 1;
       }
-      box.innerHTML = '';
-      CHIP_DEFS.forEach(([cat, label]) => {
+      // Only rebuild DOM if chips don't exist yet
+      if (!box.children.length) {
+        box.innerHTML = '';
+        CHIP_DEFS.forEach(([cat, label]) => {
+          const b = document.createElement('button');
+          b.className = 'chip' + (filterCats.has(cat) ? ' on' : '');
+          b.title = label;
+          b.dataset.cat = cat;
+          const iconFile = cat === 'aton' ? 'default_type_of_aton_not_specified' : (ICON_MAP[cat] || ICON_MAP.unknown);
+          b.innerHTML = `<img class="chip-ico${cat === 'aton' ? ' aton' : ''}" src="icons/${iconFile}.svg" alt=""><b>0</b>`;
+          const c = TYPE_COLORS[cat] || (cat === 'aton' ? '#e879f9' : TYPE_COLORS.unknown);
+          b.style.setProperty('--chip-c', c);
+          b.onclick = () => { filterCats.has(cat) ? filterCats.delete(cat) : filterCats.add(cat); renderChips(); applyFilter(); updateFilterBadge(); scheduleRender(); };
+          box.appendChild(b);
+        });
+      }
+      // Update counts only (no DOM rebuild)
+      for (const b of box.children) {
+        const cat = b.dataset.cat;
         const n = counts[cat] || 0;
-        const b = document.createElement('button');
-        b.className = 'chip' + (filterCats.has(cat) ? ' on' : '');
-        b.title = label; // legend on demand (hover)
-        const iconFile = cat === 'aton' ? 'default_type_of_aton_not_specified' : (ICON_MAP[cat] || ICON_MAP.unknown);
-        b.innerHTML = `<img class="chip-ico${cat === 'aton' ? ' aton' : ''}" src="icons/${iconFile}.svg" alt=""><b>${n.toLocaleString('en-US')}</b>`;
-        const c = TYPE_COLORS[cat] || (cat === 'aton' ? '#e879f9' : TYPE_COLORS.unknown);
-        b.style.setProperty('--chip-c', c);
-        b.onclick = () => { filterCats.has(cat) ? filterCats.delete(cat) : filterCats.add(cat); renderChips(); applyFilter(); updateFilterBadge(); scheduleRender(); };
-        box.appendChild(b);
-      });
+        const bEl = b.querySelector('b');
+        if (bEl && bEl.textContent !== n.toLocaleString('en-US')) bEl.textContent = n.toLocaleString('en-US');
+        b.classList.toggle('on', filterCats.has(cat));
+      }
     }
     function applyFilter() {
       filterText = document.getElementById('searchInput').value.toLowerCase();
@@ -1168,7 +1178,7 @@
       const panel = document.getElementById('vlist');
       if (!panel.classList.contains('open')) return;
       const now = Date.now();
-      if (now - lastVlistRender < 2000) return; // throttle: max once per 2s
+      if (now - lastVlistRender < 3000) return; // throttle: max once per 3s
       lastVlistRender = now;
       const rowsEl = document.getElementById('vlistRows');
       const bounds = map.getBounds();
@@ -1216,7 +1226,7 @@
       } else {
         html = named.slice(0, MAX).map(it => vrowHtml(it[0], it[1])).join('');
         if (unknown.length) {
-          html += `<div class="vgroup" onclick="unknownExpanded=!unknownExpanded;renderVesselList()"><span>Unknown vessels</span><span>${unknown.length} ${unknownExpanded ? '▴' : '▾'}</span></div>`;
+          html += `<div class="vgroup" onclick="unknownExpanded=!unknownExpanded;lastVlistRender=0;renderVesselList()"><span>Unknown vessels</span><span>${unknown.length} ${unknownExpanded ? '▴' : '▾'}</span></div>`;
           if (unknownExpanded) html += unknown.slice(0, MAX).map(it => vrowHtml(it[0], it[1])).join('');
         }
       }
