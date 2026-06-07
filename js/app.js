@@ -466,68 +466,6 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // BINARY LOADERS — vessels.bin + trails.bin (instant preload)
-    // ═══════════════════════════════════════════════════════════════
-    function loadVesselsBin() {
-      return fetch('vessels.bin').then(r => { if (!r.ok) throw 0; return r.arrayBuffer(); }).then(buf => {
-        const view = new DataView(buf);
-        if (buf.byteLength < 8) return;
-        const magic = String.fromCharCode(view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3));
-        const count = view.getUint32(4, true);
-        // AIS4: 5 bytes/rec (mmsi + shiptype only — enrichment cache)
-        if (magic === 'AIS4') {
-          for (let i = 0; i < count; i++) {
-            const off = 8 + i * 5;
-            const mmsi = view.getUint32(off, true);
-            const shiptype = view.getUint8(off + 4);
-            if (shiptype) {
-              const existing = vessels.get(mmsi) || {};
-              if (existing.shiptype === undefined) existing.shiptype = shiptype;
-              vessels.set(mmsi, existing);
-            }
-          }
-        } else {
-          // Legacy formats (AIS2/AIS3/AISV) — read shiptype only, ignore position
-          const recSize = magic === 'AIS3' ? 48 : magic === 'AIS2' ? 44 : 36;
-          for (let i = 0; i < count; i++) {
-            const off = 8 + i * recSize;
-            const mmsi = view.getUint32(off, true);
-            const shiptype = view.getUint8(off + 4);
-            if (shiptype) {
-              const existing = vessels.get(mmsi) || {};
-              if (existing.shiptype === undefined) existing.shiptype = shiptype;
-              vessels.set(mmsi, existing);
-            }
-          }
-        }
-      }).catch(() => { });
-    }
-
-    function loadTrailsBin() {
-      return fetch('trails.bin').then(r => { if (!r.ok) throw 0; return r.arrayBuffer(); }).then(buf => {
-        const view = new DataView(buf);
-        if (buf.byteLength < 8) return;
-        const vesselCount = view.getUint32(4, true);
-        let offset = 8;
-        for (let i = 0; i < vesselCount; i++) {
-          const mmsi = view.getUint32(offset, true);
-          const pointCount = view.getUint16(offset + 4, true);
-          offset += 6;
-          const existing = vessels.get(mmsi) || {};
-          if (!existing.trail) existing.trail = [];
-          for (let j = 0; j < pointCount; j++) {
-            const lon = view.getFloat32(offset, true);
-            const lat = view.getFloat32(offset + 4, true);
-            offset += 10;
-            existing.trail.push([lon, lat]);
-          }
-          if (existing.trail.length > TRAIL_MAX) existing.trail = existing.trail.slice(-TRAIL_MAX);
-          vessels.set(mmsi, existing);
-        }
-      }).catch(() => { });
-    }
-
-    // ═══════════════════════════════════════════════════════════════
     // WEBSOCKET CLIENT
     // ═══════════════════════════════════════════════════════════════
     let ws = null;
@@ -1035,11 +973,7 @@
       }, 30000);
 
       openIDB().then(() => {
-        // Fast path: load binary snapshot from IDB (auto-saved from previous session)
         return loadBinFromIDB();
-      }).then(() => {
-        // Fallback: try static .bin files (for fresh deploys / new browsers)
-        return Promise.all([loadVesselsBin(), loadTrailsBin()]);
       }).finally(connectWs);
 
       // Open vessel from ?mmsi= once data arrives
@@ -1922,68 +1856,6 @@
       el.innerHTML = html;
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // AUTO-EXPORT .bin files from live session data
-    // ═══════════════════════════════════════════════════════════════
-    function exportVesselsBin() {
-      const records = [];
-      for (const [mmsi, v] of vessels) {
-        if (v.name || v.shiptype) records.push({ mmsi, name: v.name || '', shiptype: v.shiptype || 0, callsign: v.callsign || '', imo: v.imo || 0 });
-      }
-      records.sort((a, b) => a.mmsi - b.mmsi);
-      const buf = new ArrayBuffer(8 + records.length * 36);
-      const view = new DataView(buf);
-      const enc = new TextEncoder();
-      view.setUint8(0, 65); view.setUint8(1, 73); view.setUint8(2, 83); view.setUint8(3, 86); // AISV
-      view.setUint32(4, records.length, true);
-      for (let i = 0; i < records.length; i++) {
-        const r = records[i], off = 8 + i * 36;
-        view.setUint32(off, r.mmsi, true);
-        view.setUint8(off + 4, r.shiptype);
-        const nameBytes = enc.encode(r.name.substring(0, 20));
-        new Uint8Array(buf, off + 5, 20).set(nameBytes.slice(0, 20));
-        const callBytes = enc.encode(r.callsign.substring(0, 7));
-        new Uint8Array(buf, off + 25, 7).set(callBytes.slice(0, 7));
-        view.setUint32(off + 32, r.imo, true);
-      }
-      download(buf, 'vessels.bin');
-      console.log('[export] vessels.bin:', records.length, 'records');
-    }
-
-    function exportTrailsBin() {
-      const entries = [];
-      for (const [mmsi, v] of vessels) {
-        if (v.trail && v.trail.length > 1 && !v.isAton) entries.push([mmsi, v.trail]);
-      }
-      entries.sort((a, b) => a[0] - b[0]);
-      let totalPts = 0;
-      for (const [, t] of entries) totalPts += t.length;
-      const buf = new ArrayBuffer(8 + entries.length * 6 + totalPts * 10);
-      const view = new DataView(buf);
-      view.setUint8(0, 65); view.setUint8(1, 73); view.setUint8(2, 83); view.setUint8(3, 84); // AIST
-      view.setUint32(4, entries.length, true);
-      let offset = 8;
-      const nowSec = Math.floor(Date.now() / 1000);
-      for (const [mmsi, trail] of entries) {
-        view.setUint32(offset, mmsi, true);
-        view.setUint16(offset + 4, trail.length, true);
-        offset += 6;
-        for (const pt of trail) {
-          view.setFloat32(offset, pt[0], true);
-          view.setFloat32(offset + 4, pt[1], true);
-          view.setUint16(offset + 8, 0, true); // age offset (live data = 0)
-          offset += 10;
-        }
-      }
-      download(buf, 'trails.bin');
-      console.log('[export] trails.bin:', entries.length, 'vessels,', totalPts, 'points');
-    }
-
-    function download(buf, name) {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([buf], { type: 'application/octet-stream' }));
-      a.download = name; a.click(); URL.revokeObjectURL(a.href);
-    }
 
     // Auto-save binary snapshots to IDB every 10 min — fully automatic, no manual export needed
     function autoSaveBin() {
