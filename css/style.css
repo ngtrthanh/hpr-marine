@@ -315,8 +315,8 @@
     }
 
     /* ═══ SPA VIEWS ═══ */
-    #view-map, #view-decoder { position: absolute; inset: 0; top: var(--topbar-h); pointer-events: auto }
-    #view-decoder { overflow: hidden }
+    #view-map, #view-decoder { position: absolute; inset: 0; top: var(--topbar-h); pointer-events: none }
+    #view-decoder { pointer-events: auto; overflow: hidden }
     body.view-decoder #map { visibility: hidden }
     body.view-decoder #loading-skeleton { display: none }
     #topbar-map-controls { display: contents }
