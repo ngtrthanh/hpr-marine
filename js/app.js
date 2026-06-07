@@ -1790,34 +1790,29 @@
       updateSelected();
     }
 
-    // Photo system — manifest-driven, any prefix/suffix/extension
+    // Photo system — prefix + count, no manifest needed
     const photoCache = new Map();
     const PHOTO_CDN = 'https://pub-655e10ff87f24bd69eff6c98a4a7fb64.r2.dev';
-    const TYPE_PHOTOS = {};
-    const ATON_PHOTOS = {};
-    const PHOTO_PREFIX_MAP = [
-      ['Platform-aton','aton','platform_aton'],['Lighthouse','aton','lighthouse'],
-      ['Lightvessel','aton','lightvessel'],['Beacon','aton','beacon'],['Buoy','aton','buoy'],
-      ['Cargo-vessel','type','cargo'],['Tanker','type','tanker'],['Passenger','type','passenger'],
-      ['Fishing-vessel','type','fishing'],['Tug','type','tug'],['Pilot-vessel','type','pilot'],
-      ['High-speed-craft','type','hsc'],['Search-and-rescue','type','sar'],
-      ['Law-enforcement','type','law'],['Medical-transport','type','medical'],
-      ['Military','type','military'],['Dive-vessel','type','dive'],
-      ['Dredging-or-underwater-ops','type','dredging'],['Platform','type','platform'],
-      ['Other-vessel-type','type','unknown'],['Pleasure-craft','type','sailing'],
-    ];
-    let manifestReady = false;
-    fetch(`${PHOTO_CDN}/photos-manifest.json`).then(r=>r.json()).then(manifest=>{
-      for (const entries of Object.values(manifest)) {
-        for (const e of entries) {
-          let group='type', cat='unknown';
-          for (const [pfx,g,c] of PHOTO_PREFIX_MAP) { if (e.file.startsWith(pfx)) { group=g; cat=c; break; } }
-          const target = group==='aton' ? ATON_PHOTOS : TYPE_PHOTOS;
-          (target[cat] = target[cat]||[]).push(`${PHOTO_CDN}/${e.file}`);
-        }
-      }
-      manifestReady = true;
-    }).catch(()=>{ manifestReady = true; });
+    // [prefix, count, startIndex] — generates prefix-{startIndex..startIndex+count-1}.jpg
+    const TYPE_PHOTO_CFG = {
+      cargo:['Cargo-vessel',10,1], tanker:['Tanker',9,1], passenger:['Passenger',10,1],
+      fishing:['Fishing-vessel',10,4], tug:['Tug',10,2], pilot:['Pilot-vessel',7,1],
+      hsc:['High-speed-craft',10,1], sailing:['Pleasure-craft',10,0],
+      pleasure:['Pleasure-craft-0',7,3], sar:['Search-and-rescue',10,1],
+      law:['Law-enforcement',10,1], medical:['Medical-transport',10,1],
+      military:['Military',10,1], dive:['Dive-vessel',10,1],
+      dredging:['Dredging-or-underwater-ops',10,1], platform:['Platform',10,0],
+      unknown:['Other-vessel-type',10,1],
+    };
+    const ATON_PHOTO_CFG = {
+      lighthouse:['Lighthouse',10,0], lightvessel:['Lightvessel',10,0],
+      buoy:['Buoy',10,0], beacon:['Beacon',10,0], platform_aton:['Platform-aton',10,0],
+    };
+    function photoUrl(cfg) {
+      const [prefix, count, start] = cfg;
+      const n = start + Math.floor(Math.random() * count);
+      return `${PHOTO_CDN}/${prefix}-${n}.jpg`;
+    }
     function atonPhotoCategory(t) {
       if (t>=4&&t<=7||t>=22&&t<=23) return 'lighthouse';
       if (t>=8&&t<=12) return 'lightvessel';
@@ -1835,14 +1830,14 @@
       let url, isReal = false;
       // TODO: MMSI-specific photo → isReal=true
       if (!isReal) {
-        let p;
-        if (v && v.isAton) p = ATON_PHOTOS[atonPhotoCategory(v.atonType||0)];
-        else p = TYPE_PHOTOS[shipCategory(v?.shiptype)];
-        url = p&&p.length ? p[Math.floor(Math.random()*p.length)] : `${PHOTO_CDN}/Other-vessel-type.jpg`;
+        let cfg;
+        if (v && v.isAton) cfg = ATON_PHOTO_CFG[atonPhotoCategory(v.atonType||0)];
+        else cfg = TYPE_PHOTO_CFG[shipCategory(v?.shiptype)];
+        url = cfg ? photoUrl(cfg) : `${PHOTO_CDN}/Other-vessel-type-1.jpg`;
       }
       const disclaimer = isReal ? '' : '<span class="photo-disclaimer">Illustration only</span>';
       const html = `<img src="${url}" alt="" loading="lazy">${disclaimer}`;
-      if (manifestReady) photoCache.set(mmsi, html);
+      photoCache.set(mmsi, html);
       el.innerHTML = html;
     }
 
