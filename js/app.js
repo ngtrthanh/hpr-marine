@@ -1873,14 +1873,14 @@
       const cat = shipCategory(shiptype);
       const p = TYPE_PHOTOS[cat];
       if (!p) return null;
-      return `photos/${p[Math.floor(Math.random()*p.length)]}.png`;
+      return `photos/${p[Math.floor(Math.random()*p.length)]}.jpg`;
     }
     function fetchVesselPhoto(imo, mmsi) {
       const el = document.getElementById('pPhoto');
       if (!el) return;
       if (photoCache.has(mmsi)) { el.innerHTML = `<img src="${photoCache.get(mmsi)}" alt="" loading="lazy">`; return; }
       const v = vessels.get(mmsi);
-      const url = v ? typePhotoUrl(v.shiptype) : 'photos/Other-vessel-type.png';
+      const url = v ? typePhotoUrl(v.shiptype) : 'photos/Other-vessel-type.jpg';
       photoCache.set(mmsi, url);
       el.innerHTML = `<img src="${url}" alt="" loading="lazy">`;
     }
