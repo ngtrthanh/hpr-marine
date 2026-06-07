@@ -1836,11 +1836,7 @@
       medical:'Medical-transport',military:'Military',dive:'Dive-vessel',
       dredging:'Dredging-or-underwater-ops',platform:'Platform',unknown:'Other-vessel-type',
     };
-    const ATON_FALLBACK_SVG = {
-      lighthouse:'light',lightvessel:'light_vessellanbyrigs',
-      buoy:'starboard_hand_lateral_mark_buoy',beacon:'beacon_safe_water',
-      platform_aton:'fixed_structures_off_shore_such_as_oil_platforms_wind_farms_note_1_this_code_should_identify_an_obstruction_that_is_fitted_with_an_aton_ais_station',
-    };
+    const ATON_FALLBACK_SVG = null; // uses ATON_ICON_MAP directly
     function fetchVesselPhoto(imo, mmsi) {
       const el = document.getElementById('pPhoto');
       if (!el) return;
@@ -1856,8 +1852,8 @@
           const url = pick(p);
           html = `<img src="${url}" alt="" loading="lazy"><span class="photo-disclaimer">Illustration only</span>`;
         } else {
-          const svg = ATON_FALLBACK_SVG[cat]||'default_type_of_aton_not_specified';
-          html = `<div style="display:flex;align-items:center;justify-content:center;height:100%;background:var(--surface2,#1e293b);border-radius:var(--r)"><img src="./icons/${svg}.svg" alt="" style="width:64px;height:64px;opacity:.7"></div>`;
+          const svg = ATON_ICON_MAP[v.atonType||0] || 'default_type_of_aton_not_specified';
+          html = `<div class="aton-photo-fallback"><img src="./icons/${svg}.svg" alt=""></div>`;
         }
       } else {
         const cat = shipCategory(v?.shiptype);
