@@ -1790,21 +1790,35 @@
       updateSelected();
     }
 
-    // Photo system — prefix only, random pick, onerror fallback
+    // Photo system — loads flat file list from R2, groups by prefix
     const photoCache = new Map();
     const PHOTO_CDN = 'https://pub-655e10ff87f24bd69eff6c98a4a7fb64.r2.dev';
-    const TYPE_PREFIX = {
-      cargo:'Cargo-vessel', tanker:'Tanker', passenger:'Passenger',
-      fishing:'Fishing-vessel', tug:'Tug', pilot:'Pilot-vessel',
-      hsc:'High-speed-craft', sailing:'Pleasure-craft', pleasure:'Pleasure-craft',
-      sar:'Search-and-rescue', law:'Law-enforcement', medical:'Medical-transport',
-      military:'Military', dive:'Dive-vessel', dredging:'Dredging-or-underwater-ops',
-      platform:'Platform', unknown:'Other-vessel-type',
-    };
-    const ATON_PREFIX = {
-      lighthouse:'Lighthouse', lightvessel:'Lightvessel',
-      buoy:'Buoy', beacon:'Beacon', platform_aton:'Platform-aton',
-    };
+    const typePhotos = {}; // shipCategory → [url, ...]
+    const atonPhotos = {}; // atonCat → [url, ...]
+    const PREFIX_MAP = [
+      ['Platform-aton','aton','platform_aton'],['Lighthouse','aton','lighthouse'],
+      ['Lightvessel','aton','lightvessel'],['Beacon','aton','beacon'],['Buoy','aton','buoy'],
+      ['Cargo-vessel','type','cargo'],['Tanker','type','tanker'],['Passenger','type','passenger'],
+      ['Fishing-vessel','type','fishing'],['Tug','type','tug'],['Pilot-vessel','type','pilot'],
+      ['High-speed-craft','type','hsc'],['Search-and-rescue','type','sar'],
+      ['Law-enforcement','type','law'],['Medical-transport','type','medical'],
+      ['Military','type','military'],['Dive-vessel','type','dive'],
+      ['Dredging-or-underwater-ops','type','dredging'],['Platform','type','platform'],
+      ['Other-vessel-type','type','unknown'],['Pleasure-craft','type','sailing'],
+    ];
+    fetch(`${PHOTO_CDN}/photos-index.txt`).then(r=>r.text()).then(txt=>{
+      for (const line of txt.split('\n')) {
+        const file = line.trim();
+        if (!file) continue;
+        for (const [pfx,group,cat] of PREFIX_MAP) {
+          if (file.startsWith(pfx)) {
+            const target = group==='aton' ? atonPhotos : typePhotos;
+            (target[cat]=target[cat]||[]).push(`${PHOTO_CDN}/${file}`);
+            break;
+          }
+        }
+      }
+    }).catch(()=>{});
     function atonPhotoCategory(t) {
       if (t>=4&&t<=7||t>=22&&t<=23) return 'lighthouse';
       if (t>=8&&t<=12) return 'lightvessel';
@@ -1819,14 +1833,16 @@
       const cached = photoCache.get(mmsi);
       if (cached) { el.innerHTML = cached; return; }
       const v = vessels.get(mmsi);
-      let prefix;
-      if (v && v.isAton) prefix = ATON_PREFIX[atonPhotoCategory(v.atonType||0)] || 'Buoy';
-      else prefix = TYPE_PREFIX[shipCategory(v?.shiptype)] || 'Other-vessel-type';
-      const n = Math.floor(Math.random() * 20);
-      const url = `${PHOTO_CDN}/${prefix}-${n}.jpg`;
-      const fallback = `${PHOTO_CDN}/${prefix}-0.jpg`;
-      const disclaimer = '<span class="photo-disclaimer">Illustration only</span>';
-      const html = `<img src="${url}" onerror="this.onerror=null;this.src='${fallback}'" alt="" loading="lazy">${disclaimer}`;
+      let url;
+      const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+      if (v && v.isAton) {
+        const p = atonPhotos[atonPhotoCategory(v.atonType||0)];
+        url = p&&p.length ? pick(p) : `${PHOTO_CDN}/Buoy-0.jpg`;
+      } else {
+        const p = typePhotos[shipCategory(v?.shiptype)];
+        url = p&&p.length ? pick(p) : `${PHOTO_CDN}/Other-vessel-type-1.jpg`;
+      }
+      const html = `<img src="${url}" alt="" loading="lazy"><span class="photo-disclaimer">Illustration only</span>`;
       photoCache.set(mmsi, html);
       el.innerHTML = html;
     }
