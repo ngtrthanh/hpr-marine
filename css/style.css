@@ -177,12 +177,12 @@
 
     /* ── Ship detail card (right panel) ── */
     #vcard {
-      position: absolute; top: auto; left: calc(50% + 20px); right: auto; bottom: 12px; width: 320px; max-height: calc(100vh - var(--topbar-h) - 24px); pointer-events: auto;
+      position: absolute; top: calc(var(--topbar-h) + 8px); right: 52px; bottom: auto; left: auto; width: 320px; max-height: calc(100vh - var(--topbar-h) - 24px); pointer-events: auto;
       background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--e2); backdrop-filter: blur(10px);
       display: flex; flex-direction: column; font-size: var(--fs);
-      transform: translateY(calc(100% + 16px)); transition: transform .22s ease; overflow: hidden; z-index: 20;
+      transform: translateX(calc(100% + 72px)); transition: transform .22s ease; overflow: hidden; z-index: 20;
     }
-    #vcard.open { transform: translateY(0) }
+    #vcard.open { transform: translateX(0) }
     .sc-head { padding: var(--s3) var(--s4); border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1); position: relative }
     .sc-title { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0 }
     .sc-name { font-size: var(--fs-lg); font-weight: 700; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }

@@ -666,7 +666,8 @@
       style: getMapStyle(curStyle),
       center: [initLon, initLat],
       zoom: initZoom,
-      attributionControl: false
+      attributionControl: false,
+      transformStyle: (prev, next) => { if(next) next.glyphs = 'https://api.maptiler.com/fonts/{fontstack}/{range}.pbf?key=nRYox0R1ZyZ6XqSStq4S'; return next; }
     });
 
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
