@@ -1543,7 +1543,7 @@
           wdir: wdir < 360 ? wdir : null,
           temp: airtemp > -1024 ? airtemp / 10 : null,
           humidity: humidity <= 100 ? humidity : null,
-          pressure: pressure < 511 ? pressure : null,
+          pressure: pressure < 1311 ? pressure : null,
           waterLevel: wlRaw > 0 && wlRaw < 4001 ? (wlRaw - 1000) / 100 : null,
           waveHeight: dv.getUint8(22) < 251 ? dv.getUint8(22) / 10 : null,
           seaState: dv.getUint8(23) < 13 ? dv.getUint8(23) : null,
@@ -1677,19 +1677,19 @@
     }
 
     function showStationPopup(s) {
-      const beaufort = ['Calm','Light air','Light breeze','Gentle breeze','Moderate','Fresh','Strong','Near gale','Gale','Strong gale','Storm','Violent storm','Hurricane'];
+      const v = x => x != null && x !== 0 ? x : '—';
       const wl = s.waterLevel != null ? `<div class="wx-item"><span class="wx-val">${s.waterLevel.toFixed(2)}m</span><span class="wx-label">Water Lv</span></div>` : '';
       const html = `<div class="wx-popup">
         <div class="wx-title">⚓ Weather Station</div>
         <div class="wx-mmsi">${s.country || ''} · MMSI ${s.mmsi}</div>
         <div class="wx-grid">
-          <div class="wx-item"><span class="wx-val">${s.wspeed}</span><span class="wx-label">Wind kn</span></div>
-          <div class="wx-item"><span class="wx-val">${s.wgust || '—'}</span><span class="wx-label">Gust kn</span></div>
-          <div class="wx-item"><span class="wx-val">${s.wdir}°</span><span class="wx-label">Dir</span></div>
-          <div class="wx-item"><span class="wx-val">${typeof s.temp === 'number' ? s.temp.toFixed(1)+'°' : '—'}</span><span class="wx-label">Temp</span></div>
-          <div class="wx-item"><span class="wx-val">${s.pressure || '—'}</span><span class="wx-label">hPa</span></div>
-          <div class="wx-item"><span class="wx-val">${s.humidity || '—'}%</span><span class="wx-label">Humid</span></div>
-          <div class="wx-item"><span class="wx-val">${s.waveHeight || '—'}m</span><span class="wx-label">Waves</span></div>
+          <div class="wx-item"><span class="wx-val">${v(s.wspeed)}</span><span class="wx-label">Wind kn</span></div>
+          <div class="wx-item"><span class="wx-val">${v(s.wgust)}</span><span class="wx-label">Gust kn</span></div>
+          <div class="wx-item"><span class="wx-val">${s.wdir != null ? s.wdir+'°' : '—'}</span><span class="wx-label">Dir</span></div>
+          <div class="wx-item"><span class="wx-val">${s.temp != null ? s.temp.toFixed(1)+'°' : '—'}</span><span class="wx-label">Temp</span></div>
+          <div class="wx-item"><span class="wx-val">${s.pressure != null ? s.pressure : '—'}</span><span class="wx-label">hPa</span></div>
+          <div class="wx-item"><span class="wx-val">${s.humidity != null ? s.humidity+'%' : '—'}</span><span class="wx-label">Humid</span></div>
+          <div class="wx-item"><span class="wx-val">${s.waveHeight != null ? s.waveHeight+'m' : '—'}</span><span class="wx-label">Waves</span></div>
           ${wl}
         </div>
         <div class="wx-age">${s.hour != null ? String(s.hour).padStart(2,'0')+':'+String(s.min).padStart(2,'0')+' UTC' : fmtAge(s.ts)}</div>
