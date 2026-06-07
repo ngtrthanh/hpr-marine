@@ -1856,47 +1856,44 @@
       updateSelected();
     }
 
-    // Vessel photo from Wikimedia Commons (by IMO)
-    const photoCache = new Map(); // mmsi → url|null
+    // Vessel photo: MMSI.jpg → Wikimedia → type-based fallback
+    const photoCache = new Map();
+    const TYPE_PHOTOS = {
+      cargo:['Cargo vessel'],tanker:['Tanker'],passenger:['Passenger'],
+      fishing:['Fishing vessel','Fishing vessel 2','Fishing vessel 3'],
+      tug:['Tug','Tug 1'],sailing:['Pleasure craft 0','Pleasure craft 1','Pleasure craft 2','Pleasure craft 3','Pleasure craft 4','Pleasure craft 5'],
+      pilot:['Pilot vessel'],hsc:['High speed craft'],
+      pleasure:['Pleasure craft 00','Pleasure craft 1','Pleasure craft 2'],
+      sar:['Search and rescue'],law:['Law enforcement'],
+      medical:['Medical transport','Medical transport 1','Medical transport 2'],
+      military:['Military'],dive:['Dive vessel'],dredging:['Dredging or underwater ops'],
+      unknown:['Other vessel type'],
+    };
+    function typePhotoUrl(shiptype) {
+      const cat = shipCategory(shiptype);
+      const p = TYPE_PHOTOS[cat];
+      if (!p) return null;
+      return `photos/${p[Math.floor(Math.random()*p.length)]}.png`;
+    }
     async function fetchVesselPhoto(imo, mmsi) {
       const el = document.getElementById('pPhoto');
       if (!el) return;
-      if (!mmsi) { el.innerHTML = ''; el.style.display = 'none'; return; }
+      if (!mmsi) { el.innerHTML=''; el.style.display='none'; return; }
       el.style.display = '';
-      if (photoCache.has(mmsi)) {
-        const url = photoCache.get(mmsi);
-        el.innerHTML = url ? `<img src="${url}" alt="Vessel photo" loading="lazy">` : '';
-        if (!url) el.style.display = 'none';
-        return;
-      }
+      if (photoCache.has(mmsi)) { const u=photoCache.get(mmsi); el.innerHTML=u?`<img src="${u}" alt="" loading="lazy">`:''; if(!u)el.style.display='none'; return; }
       el.innerHTML = '<div class="sc-photo-skeleton"></div>';
-      try {
-        // Try local photo first (photos/MMSI.jpg)
-        const localUrl = `photos/${mmsi}.jpg`;
-        const lr = await fetch(localUrl, { method: 'HEAD' });
-        if (lr.ok) {
-          photoCache.set(mmsi, localUrl);
-          if (selectedMmsi === mmsi) el.innerHTML = `<img src="${localUrl}" alt="Vessel photo" loading="lazy">`;
-          return;
-        }
-      } catch {}
-      // Fallback: Wikimedia Commons by IMO
-      if (!imo) { photoCache.set(mmsi, null); el.innerHTML = ''; el.style.display = 'none'; return; }
-      try {
-        const base = 'https://commons.wikimedia.org/w/api.php';
-        const r = await fetch(`${base}?action=query&list=categorymembers&cmtype=file&cmtitle=Category:IMO_${imo}&format=json&origin=*`);
-        const d = await r.json();
-        const members = d.query?.categorymembers;
-        if (!members?.length) { photoCache.set(mmsi, null); el.innerHTML = ''; el.style.display = 'none'; return; }
-        const r2 = await fetch(`${base}?action=query&titles=${encodeURIComponent(members[0].title)}&prop=imageinfo&iiprop=url&iiurlwidth=640&format=json&origin=*`);
-        const d2 = await r2.json();
-        const url = Object.values(d2.query.pages)[0]?.imageinfo?.[0]?.thumburl || null;
-        photoCache.set(mmsi, url);
-        if (document.getElementById('pPhoto') && selectedMmsi === mmsi) {
-          el.innerHTML = url ? `<img src="${url}" alt="Vessel photo" loading="lazy">` : '';
-          if (!url) el.style.display = 'none';
-        }
-      } catch { photoCache.set(mmsi, null); el.innerHTML = ''; el.style.display = 'none'; }
+      // 1. Local MMSI photo
+      try { const r=await fetch(`photos/${mmsi}.jpg`,{method:'HEAD'}); if(r.ok){const u=`photos/${mmsi}.jpg`;photoCache.set(mmsi,u);if(selectedMmsi===mmsi)el.innerHTML=`<img src="${u}" alt="" loading="lazy">`;return;} } catch{}
+      // 2. Wikimedia by IMO
+      if (imo) try {
+        const base='https://commons.wikimedia.org/w/api.php';
+        const d=await(await fetch(`${base}?action=query&list=categorymembers&cmtype=file&cmtitle=Category:IMO_${imo}&format=json&origin=*`)).json();
+        if(d.query?.categorymembers?.length){const d2=await(await fetch(`${base}?action=query&titles=${encodeURIComponent(d.query.categorymembers[0].title)}&prop=imageinfo&iiprop=url&iiurlwidth=640&format=json&origin=*`)).json();const u=Object.values(d2.query.pages)[0]?.imageinfo?.[0]?.thumburl;if(u){photoCache.set(mmsi,u);if(selectedMmsi===mmsi)el.innerHTML=`<img src="${u}" alt="" loading="lazy">`;return;}}
+      } catch{}
+      // 3. Type-based fallback
+      const v=vessels.get(mmsi); const u=v?typePhotoUrl(v.shiptype):null;
+      photoCache.set(mmsi,u);
+      if(selectedMmsi===mmsi){el.innerHTML=u?`<img src="${u}" alt="" loading="lazy">`:'';if(!u)el.style.display='none';}
     }
 
     // ═══════════════════════════════════════════════════════════════
