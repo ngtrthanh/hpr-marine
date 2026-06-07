@@ -1788,7 +1788,6 @@
       const f = (k, val) => val ? `<div class="sf"><span class="k">${esc(k)}</span><span class="v">${esc(val)}</span></div>` : '';
       const sec = (title, content) => content.trim() ? `<div class="sc-section"><div class="st">${title}</div>${content}</div>` : '';
       let html = `<div class="sc-photo" id="pPhoto"><div class="sc-photo-skeleton"></div></div>`;
-      fetchVesselPhoto(v.imo, mmsi);
 
       if (v.isAton) {
         document.getElementById('pType').textContent = 'AtoN';
@@ -1825,6 +1824,7 @@
         );
       }
       document.getElementById('pBody').innerHTML = html;
+      fetchVesselPhoto(v.imo, mmsi);
       document.getElementById('pActions').innerHTML =
         `<button class="act${followMode?' on':''}" id="actFollow" onclick="toggleFollow()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>Follow</button>` +
         `<button class="act" onclick="copyMMSI(${mmsi})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>Copy</button>` +
