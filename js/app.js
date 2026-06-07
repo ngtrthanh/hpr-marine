@@ -1856,7 +1856,7 @@
       updateSelected();
     }
 
-    // Vessel photo: MMSI.jpg → Wikimedia → type-based fallback
+    // Vessel photo: type-based fallback (MMSI/Wiki disabled for now)
     const photoCache = new Map();
     const TYPE_PHOTOS = {
       cargo:['Cargo vessel'],tanker:['Tanker'],passenger:['Passenger'],
@@ -1875,25 +1875,14 @@
       if (!p) return null;
       return `photos/${p[Math.floor(Math.random()*p.length)]}.png`;
     }
-    async function fetchVesselPhoto(imo, mmsi) {
+    function fetchVesselPhoto(imo, mmsi) {
       const el = document.getElementById('pPhoto');
       if (!el) return;
-      if (!mmsi) { el.innerHTML=''; el.style.display='none'; return; }
-      el.style.display = '';
-      if (photoCache.has(mmsi)) { const u=photoCache.get(mmsi); el.innerHTML=u?`<img src="${u}" alt="" loading="lazy">`:''; if(!u)el.style.display='none'; return; }
-      el.innerHTML = '<div class="sc-photo-skeleton"></div>';
-      // 1. Local MMSI photo
-      try { const r=await fetch(`photos/${mmsi}.jpg`,{method:'HEAD'}); if(r.ok){const u=`photos/${mmsi}.jpg`;photoCache.set(mmsi,u);if(selectedMmsi===mmsi)el.innerHTML=`<img src="${u}" alt="" loading="lazy">`;return;} } catch{}
-      // 2. Wikimedia by IMO
-      if (imo) try {
-        const base='https://commons.wikimedia.org/w/api.php';
-        const d=await(await fetch(`${base}?action=query&list=categorymembers&cmtype=file&cmtitle=Category:IMO_${imo}&format=json&origin=*`)).json();
-        if(d.query?.categorymembers?.length){const d2=await(await fetch(`${base}?action=query&titles=${encodeURIComponent(d.query.categorymembers[0].title)}&prop=imageinfo&iiprop=url&iiurlwidth=640&format=json&origin=*`)).json();const u=Object.values(d2.query.pages)[0]?.imageinfo?.[0]?.thumburl;if(u){photoCache.set(mmsi,u);if(selectedMmsi===mmsi)el.innerHTML=`<img src="${u}" alt="" loading="lazy">`;return;}}
-      } catch{}
-      // 3. Type-based fallback
-      const v=vessels.get(mmsi); const u=v?typePhotoUrl(v.shiptype):null;
-      photoCache.set(mmsi,u);
-      if(selectedMmsi===mmsi){el.innerHTML=u?`<img src="${u}" alt="" loading="lazy">`:'';if(!u)el.style.display='none';}
+      if (photoCache.has(mmsi)) { el.innerHTML = `<img src="${photoCache.get(mmsi)}" alt="" loading="lazy">`; return; }
+      const v = vessels.get(mmsi);
+      const url = v ? typePhotoUrl(v.shiptype) : 'photos/Other vessel type.png';
+      photoCache.set(mmsi, url);
+      el.innerHTML = `<img src="${url}" alt="" loading="lazy">`;
     }
 
     // ═══════════════════════════════════════════════════════════════
