@@ -1555,6 +1555,41 @@
       }
     }
 
+    // Poll AIS-catcher binmsgs.json endpoints for met/hydro data (multi-part type 8)
+    const BINMSG_ENDPOINTS = [
+      'https://m3.hpradar.com/api/binmsgs.json',
+      'https://aisinfra.hpradar.com/api/binmsgs.json'
+    ];
+    function pollBinMsgs() {
+      for (const url of BINMSG_ENDPOINTS) {
+        fetch(url).then(r => r.json()).then(data => {
+          const msgs = Array.isArray(data) ? data : (data.messages || []);
+          for (const m of msgs) {
+            if (m.dac !== 1 || m.fi !== 31) continue;
+            const msg = m.message;
+            if (!msg || !msg.lon || !msg.lat) continue;
+            stations.set(msg.mmsi, {
+              lon: msg.lon, lat: msg.lat,
+              day: msg.day, hour: msg.hour, min: msg.minute,
+              wspeed: msg.wspeed ?? 0, wgust: msg.wgust ?? 0,
+              wdir: msg.wdir ?? 0,
+              temp: msg.airtemp ?? msg.temperature ?? 0,
+              humidity: msg.humidity ?? 0,
+              pressure: msg.pressure ?? 0,
+              waveHeight: msg.waveheight ?? 0,
+              seaState: msg.seastate ?? 0,
+              waterLevel: msg.waterlevel ?? null,
+              ts: (m.timestamp || msg.rxuxtime) * 1000, mmsi: msg.mmsi,
+              country: msg.country
+            });
+          }
+          renderStations();
+        }).catch(() => {});
+      }
+    }
+    pollBinMsgs();
+    setInterval(pollBinMsgs, 180000); // refresh every 3 min
+
     function renderStations() {
       const src = map.getSource('wx-stations');
       if (!src) return;
@@ -1635,22 +1670,23 @@
 
     function showStationPopup(s) {
       const beaufort = ['Calm','Light air','Light breeze','Gentle breeze','Moderate','Fresh','Strong','Near gale','Gale','Strong gale','Storm','Violent storm','Hurricane'];
+      const wl = s.waterLevel != null ? `<div class="wx-item"><span class="wx-val">${s.waterLevel.toFixed(2)}m</span><span class="wx-label">Water Lv</span></div>` : '';
       const html = `<div class="wx-popup">
-        <div class="wx-title">Weather Station</div>
-        <div class="wx-mmsi">MMSI ${s.mmsi}</div>
+        <div class="wx-title">⚓ Weather Station</div>
+        <div class="wx-mmsi">${s.country || ''} · MMSI ${s.mmsi}</div>
         <div class="wx-grid">
           <div class="wx-item"><span class="wx-val">${s.wspeed}</span><span class="wx-label">Wind kn</span></div>
-          <div class="wx-item"><span class="wx-val">${s.wgust}</span><span class="wx-label">Gust kn</span></div>
+          <div class="wx-item"><span class="wx-val">${s.wgust || '—'}</span><span class="wx-label">Gust kn</span></div>
           <div class="wx-item"><span class="wx-val">${s.wdir}°</span><span class="wx-label">Dir</span></div>
-          <div class="wx-item"><span class="wx-val">${s.temp.toFixed(1)}°</span><span class="wx-label">Temp</span></div>
-          <div class="wx-item"><span class="wx-val">${s.pressure}</span><span class="wx-label">hPa</span></div>
-          <div class="wx-item"><span class="wx-val">${s.humidity}%</span><span class="wx-label">Humidity</span></div>
-          <div class="wx-item"><span class="wx-val">${s.waveHeight}m</span><span class="wx-label">Waves</span></div>
-          <div class="wx-item"><span class="wx-val">${beaufort[s.seaState] || s.seaState}</span><span class="wx-label">Sea</span></div>
+          <div class="wx-item"><span class="wx-val">${typeof s.temp === 'number' ? s.temp.toFixed(1)+'°' : '—'}</span><span class="wx-label">Temp</span></div>
+          <div class="wx-item"><span class="wx-val">${s.pressure || '—'}</span><span class="wx-label">hPa</span></div>
+          <div class="wx-item"><span class="wx-val">${s.humidity || '—'}%</span><span class="wx-label">Humid</span></div>
+          <div class="wx-item"><span class="wx-val">${s.waveHeight || '—'}m</span><span class="wx-label">Waves</span></div>
+          ${wl}
         </div>
-        <div class="wx-age">${fmtAge(s.ts)}</div>
+        <div class="wx-age">${s.hour != null ? String(s.hour).padStart(2,'0')+':'+String(s.min).padStart(2,'0')+' UTC' : fmtAge(s.ts)}</div>
       </div>`;
-      new maplibregl.Popup({ maxWidth: '260px' }).setLngLat([s.lon, s.lat]).setHTML(html).addTo(map);
+      new maplibregl.Popup({ maxWidth: '280px' }).setLngLat([s.lon, s.lat]).setHTML(html).addTo(map);
     }
 
     function updateStats() {
