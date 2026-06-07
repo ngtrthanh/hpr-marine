@@ -1806,6 +1806,7 @@
       ['Dredging-or-underwater-ops','type','dredging'],['Platform','type','platform'],
       ['Other-vessel-type','type','unknown'],['Pleasure-craft','type','sailing'],
     ];
+    let manifestReady = false;
     fetch(`${PHOTO_CDN}/photos-manifest.json`).then(r=>r.json()).then(manifest=>{
       for (const entries of Object.values(manifest)) {
         for (const e of entries) {
@@ -1815,7 +1816,8 @@
           (target[cat] = target[cat]||[]).push(`${PHOTO_CDN}/${e.file}`);
         }
       }
-    }).catch(()=>{});
+      manifestReady = true;
+    }).catch(()=>{ manifestReady = true; });
     function atonPhotoCategory(t) {
       if (t>=4&&t<=7||t>=22&&t<=23) return 'lighthouse';
       if (t>=8&&t<=12) return 'lightvessel';
@@ -1840,7 +1842,7 @@
       }
       const disclaimer = isReal ? '' : '<span class="photo-disclaimer">Illustration only</span>';
       const html = `<img src="${url}" alt="" loading="lazy">${disclaimer}`;
-      photoCache.set(mmsi, html);
+      if (manifestReady) photoCache.set(mmsi, html);
       el.innerHTML = html;
     }
 
