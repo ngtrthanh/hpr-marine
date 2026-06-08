@@ -15,6 +15,15 @@
       --fs-xs:11px;--fs-sm:12px;--fs:13px;--fs-lg:15px;--fs-xl:20px;
       /* shell metrics */
       --topbar-h:48px;--drawer-w:320px;
+      --map-edge:10px;--map-control-w:36px;--control-gap:10px;--panel-gap:10px;
+      --panel-w:320px;--rail-w:66px;--vlist-w:280px;
+      --shipcard-w:var(--panel-w);--ai-panel-w:var(--panel-w);
+      --control-lane-w:calc(var(--map-control-w) + var(--control-gap));
+      --right-panel-offset:calc(var(--map-edge) + var(--control-lane-w));
+      --vlist-left:calc(var(--map-edge) + var(--rail-w) + var(--panel-gap));
+      --panel-h:calc(100vh - var(--topbar-h) - (var(--map-edge) * 2));
+      --vlist-bottom-reserve:96px;--fab-size:44px;--fab-bottom:42px;--ai-panel-gap-to-fab:10px;
+      --ai-panel-floating-bottom:calc(var(--fab-bottom) + var(--fab-size) + var(--ai-panel-gap-to-fab));
       /* light theme (default, clean) */
       --bg:#eef2f6;--surface:rgba(255,255,255,.94);--surface-2:#f6f9fc;--surface-3:#eaeff5;
       --border:#cbd5e1;--accent:#0284c7;--gold:#d97706;
@@ -88,7 +97,7 @@
 
     /* ── Left command rail ── */
     #rail {
-      position: absolute; left: 10px; top: calc(var(--topbar-h) + 4px); z-index: 22; pointer-events: auto;
+      position: absolute; left: var(--map-edge); top: var(--map-edge); z-index: 22; pointer-events: auto;
       display: flex; flex-direction: column; gap: 2px; padding: var(--s1);
       background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
       box-shadow: var(--e2); backdrop-filter: blur(8px);
@@ -177,7 +186,7 @@
 
     /* ── Ship detail card (right panel) ── */
     #vcard {
-      position: absolute; top: calc(var(--topbar-h) + 10px); right: 54px; bottom: auto; left: auto; width: 320px; max-height: calc(100vh - var(--topbar-h) - 24px); pointer-events: auto;
+      position: absolute; top: var(--map-edge); right: var(--right-panel-offset); bottom: auto; left: auto; width: var(--shipcard-w); max-height: var(--panel-h); pointer-events: auto;
       background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--e2); backdrop-filter: blur(10px);
       display: flex; flex-direction: column; font-size: var(--fs);
       transform: translateX(calc(100% + 72px)); transition: transform .22s ease; overflow: hidden; z-index: 20;
@@ -235,8 +244,8 @@
 
     /* ── Right smart vessel list ── */
     #vlist {
-      position: absolute; top: calc(var(--topbar-h) + 4px); left: 78px; width: 280px; pointer-events: auto;
-      max-height: calc(100vh - var(--topbar-h) - 16px); display: flex; flex-direction: column;
+      position: absolute; top: var(--map-edge); left: var(--vlist-left); width: var(--vlist-w); pointer-events: auto;
+      max-height: calc(100vh - var(--topbar-h) - var(--vlist-bottom-reserve)); display: flex; flex-direction: column;
       background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
       box-shadow: var(--e2); backdrop-filter: blur(10px); overflow: hidden;
       transform: translateX(calc(-100% - 90px)); transition: transform .22s ease;
@@ -262,9 +271,18 @@
     .vgroup:hover { color: var(--text) }
     .vlist-empty { padding: var(--s5); text-align: center; color: var(--text3); font-size: var(--fs-sm) }
 
+
     /* ── MapLibre control positioning ── */
-    .maplibregl-ctrl-top-right { top: calc(var(--topbar-h) + 10px) !important; right: 10px !important }
-    .maplibregl-ctrl-bottom-right { right: 10px !important }
+    .maplibregl-ctrl-top-right { top: calc(var(--topbar-h) + var(--map-edge)) !important; right: var(--map-edge) !important }
+    .maplibregl-ctrl-bottom-right { right: var(--map-edge) !important }
+
+    #coord-display {
+      position: absolute; bottom: var(--map-edge); left: var(--map-edge); z-index: 2;
+      padding: 2px 6px; background: none; pointer-events: none;
+      font: 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--text2); text-shadow: 0 1px 3px var(--bg), 0 0 6px var(--bg);
+      transition: left .2s, bottom .2s, opacity .2s;
+    }
 
     /* ── MapLibre popup theming ── */
     .maplibregl-popup-content {
@@ -303,7 +321,8 @@
       }
       #vcard.open { transform: translateY(0) }
       /* Vessel list: full-width overlay from top */
-      #vlist { left: 0; right: 0; width: 100%; top: var(--topbar-h); max-height: calc(100vh - var(--topbar-h) - 60px); border-radius: 0 }
+      #vlist { left: 0; right: 0; width: 100%; top: 0; max-height: calc(100vh - var(--topbar-h) - var(--vlist-bottom-reserve)); border-radius: 0 }
+      #coord-display { left: var(--map-edge); bottom: calc(52px + var(--map-edge)) }
       .brand { font-size: var(--fs) }
       #chips { display: none }
       /* Map controls: right edge */

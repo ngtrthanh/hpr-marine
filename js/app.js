@@ -598,7 +598,7 @@
     // Coordinate + zoom display (bottom-left)
     const coordEl = document.createElement('div');
     coordEl.id = 'coord-display';
-    coordEl.style.cssText = 'position:absolute;bottom:4px;left:8px;background:none;padding:2px 6px;font:10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text2);pointer-events:none;z-index:2;text-shadow:0 1px 3px var(--bg),0 0 6px var(--bg);transition:opacity .2s';
+    coordEl.setAttribute('aria-hidden', 'true');
     document.getElementById('map').appendChild(coordEl);
     function updateCoord(lng, lat) {
       const z = map.getZoom().toFixed(1);
@@ -1598,10 +1598,12 @@
         `<a class="act" href="https://www.vesselfinder.com/vessels/details/${mmsi}" target="_blank" rel="noopener">VF</a>`;
       if (window.innerWidth <= 600) { document.getElementById('vlist').classList.remove('open'); document.getElementById('railListBtn').classList.remove('on'); document.documentElement.classList.remove('vlist-open'); }
       panel.classList.add('open');
+      // Mark document so chat CSS can avoid overlapping the vessel card
+      document.documentElement.classList.add('vcard-open');
     }
 
     let autoShowCard = localStorage.getItem('autoShowCard') !== 'false';
-    function closePanel() { document.getElementById('vcard').classList.remove('open'); selectedMmsi = null; followMode = false; updateUrl(); updateSelected(); renderTrails(); }
+    function closePanel() { document.getElementById('vcard').classList.remove('open'); document.documentElement.classList.remove('vcard-open'); selectedMmsi = null; followMode = false; updateUrl(); updateSelected(); renderTrails(); }
     function copyMMSI(mmsi) { navigator.clipboard?.writeText(String(mmsi)); flash('MMSI copied'); }
     function shareVessel(mmsi) {
       const url = location.origin + location.pathname + `?mmsi=${mmsi}`;
@@ -2058,18 +2060,71 @@
       }
     }
 
-    function renderMd(s) {
-      return s
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-        .replace(/\[action:[^\]]+\]/g, '') // strip action tags from display
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        .replace(/`(.+?)`/g, '<code>$1</code>')
-        .replace(/^\|(.+)\|$/gm, (m, row) => '<tr>' + row.split('|').map(c => `<td>${c.trim()}</td>`).join('') + '</tr>')
-        .replace(/(<tr>.*<\/tr>\n?)+/g, '<table class="ai-tbl">$&</table>')
-        .replace(/^\* (.+)$/gm, '<li>$1</li>')
-        .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
-        .replace(/\n/g, '<br>');
+    function escHtml(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+    function renderInlineMd(s) {
+      return escHtml(s)
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    }
+    function renderTableMd(lines) {
+      const rows = lines.map(line => line.trim().replace(/^\||\|$/g, '').split('|').map(c => renderInlineMd(c.trim())));
+      const head = rows.shift() || [];
+      if (rows[0] && rows[0].every(c => /^:?-{3,}:?$/.test(c.replace(/<[^>]+>/g, '')))) rows.shift();
+      return '<table class="ai-tbl"><thead><tr>' + head.map(c => `<th>${c}</th>`).join('') +
+        '</tr></thead><tbody>' + rows.map(r => '<tr>' + r.map(c => `<td>${c}</td>`).join('') + '</tr>').join('') + '</tbody></table>';
+    }
+    function renderMd(input) {
+      const s = String(input ?? '').replace(/\[action:[^\]]+\]/g, '').replace(/\r\n/g, '\n');
+      const lines = s.split('\n');
+      const out = [];
+      for (let i = 0; i < lines.length;) {
+        if (!lines[i].trim()) { i++; continue; }
+        if (/^```/.test(lines[i])) {
+          const lang = lines[i].replace(/^```/, '').trim();
+          const code = [];
+          for (i++; i < lines.length && !/^```/.test(lines[i]); i++) code.push(lines[i]);
+          if (i < lines.length) i++;
+          out.push(`<pre><code${lang ? ` data-lang="${escHtml(lang)}"` : ''}>${escHtml(code.join('\n'))}</code></pre>`);
+          continue;
+        }
+        if (/^\s*\|.+\|\s*$/.test(lines[i])) {
+          const tbl = [];
+          while (i < lines.length && /^\s*\|.+\|\s*$/.test(lines[i])) tbl.push(lines[i++]);
+          out.push(renderTableMd(tbl));
+          continue;
+        }
+        if (/^\s*[-*]\s+/.test(lines[i])) {
+          const items = [];
+          while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) items.push(lines[i++].replace(/^\s*[-*]\s+/, ''));
+          out.push('<ul>' + items.map(item => `<li>${renderInlineMd(item)}</li>`).join('') + '</ul>');
+          continue;
+        }
+        if (/^\s*\d+\.\s+/.test(lines[i])) {
+          const items = [];
+          while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) items.push(lines[i++].replace(/^\s*\d+\.\s+/, ''));
+          out.push('<ol>' + items.map(item => `<li>${renderInlineMd(item)}</li>`).join('') + '</ol>');
+          continue;
+        }
+        if (/^#{1,3}\s+/.test(lines[i])) {
+          const level = lines[i].match(/^#+/)[0].length;
+          out.push(`<h${level}>${renderInlineMd(lines[i].replace(/^#{1,3}\s+/, ''))}</h${level}>`);
+          i++;
+          continue;
+        }
+        const para = [];
+        while (i < lines.length && lines[i].trim() && !/^```|^\s*\|.+\|\s*$|^\s*[-*]\s+|^\s*\d+\.\s+|^#{1,3}\s+/.test(lines[i])) para.push(lines[i++]);
+        out.push(`<p>${renderInlineMd(para.join(' '))}</p>`);
+      }
+      return out.join('');
     }
 
     function executeActions(text) {
@@ -2115,11 +2170,11 @@
     // Inject chat styles
     const chatCSS = document.createElement('style');
     chatCSS.textContent = `
-      #ai-chat { position:fixed; bottom:16px; right:16px; z-index:9990; font-family:'Inter',system-ui,sans-serif; }
-      #ai-fab { width:44px; height:44px; border-radius:var(--r-lg); border:1px solid var(--border); background:var(--surface); color:var(--accent); display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:var(--e2); transition:all .2s; }
+      #ai-chat { position:fixed; bottom:var(--fab-bottom); right:var(--map-edge); z-index:9990; font-family:'Inter',system-ui,sans-serif; }
+      #ai-fab { width:var(--fab-size); height:var(--fab-size); border-radius:var(--r-lg); border:1px solid var(--border); background:var(--surface); color:var(--accent); display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:var(--e2); transition:all .2s; }
       #ai-fab:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,0,0,.3); }
       #ai-fab.ai-active { background:var(--accent); color:var(--bg); border-color:var(--accent); }
-      #ai-panel { position:absolute; bottom:54px; right:0; width:380px; max-height:520px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); display:flex; flex-direction:column; overflow:hidden; box-shadow:var(--e2); backdrop-filter:blur(12px); }
+      #ai-panel { position:absolute; bottom:calc(var(--fab-size) + var(--ai-panel-gap-to-fab)); right:0; width:var(--ai-panel-w); height:min(620px, calc(100vh - var(--topbar-h) - var(--ai-panel-floating-bottom))); max-height:620px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); display:flex; flex-direction:column; overflow:hidden; box-shadow:var(--e2); backdrop-filter:blur(12px); }
       #ai-panel.ai-hidden { display:none; }
       #ai-header { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid var(--border); }
       .ai-hdr-left { display:flex; align-items:center; gap:8px; font-size:var(--fs-sm); font-weight:600; color:var(--text); }
@@ -2127,22 +2182,29 @@
       #ai-header button { background:none; border:none; color:var(--text3); font-size:20px; cursor:pointer; line-height:1; padding:2px 6px; border-radius:4px; }
       #ai-header button:hover { background:var(--surface-3); }
       .ai-hdr-right { display:flex; align-items:center; gap:2px; }
-      #ai-messages { flex:1; overflow-y:auto; padding:16px; min-height:220px; max-height:380px; }
+      #ai-messages { flex:1; overflow-y:auto; padding:16px; min-height:0; max-height:none; }
       .ai-welcome { text-align:center; padding:20px 10px; }
       .ai-welcome p { color:var(--text3); font-size:var(--fs-sm); margin-bottom:16px; }
       #ai-suggestions { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; }
       .ai-sug { background:var(--surface-3); border:1px solid var(--border); border-radius:20px; padding:6px 12px; font-size:11px; color:var(--text2); cursor:pointer; transition:all .15s; font-family:inherit; }
       .ai-sug:hover { background:var(--accent); color:var(--bg); border-color:var(--accent); }
-      .ai-msg { margin-bottom:10px; padding:10px 14px; border-radius:var(--r-lg); font-size:var(--fs-sm); line-height:1.6; word-wrap:break-word; white-space:pre-wrap; }
+      .ai-msg { margin-bottom:10px; padding:10px 14px; border-radius:var(--r-lg); font-size:var(--fs-sm); line-height:1.6; overflow-wrap:anywhere; }
       .ai-user { background:var(--accent); color:white; margin-left:60px; border-bottom-right-radius:4px; }
       .ai-ai { background:var(--surface-3); color:var(--text); margin-right:40px; border-bottom-left-radius:4px; border:1px solid var(--border); }
       .ai-ai strong { color:var(--accent); }
+      .ai-ai p { margin:0 0 8px; }
+      .ai-ai p:last-child { margin-bottom:0; }
+      .ai-ai h1,.ai-ai h2,.ai-ai h3 { margin:4px 0 8px; font-size:var(--fs-sm); line-height:1.3; }
+      .ai-ai a { color:var(--accent); text-decoration:none; }
+      .ai-ai a:hover { text-decoration:underline; }
       .ai-ai code { background:var(--surface-2); padding:1px 4px; border-radius:3px; font-size:11px; }
-      .ai-ai ul { margin:4px 0; padding-left:16px; }
+      .ai-ai pre { margin:6px 0; padding:8px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r); }
+      .ai-ai pre code { padding:0; background:none; white-space:pre; }
+      .ai-ai ul,.ai-ai ol { margin:4px 0 8px; padding-left:18px; }
       .ai-ai li { margin:2px 0; }
       .ai-tbl { width:100%; border-collapse:collapse; margin:6px 0; font-size:11px; }
-      .ai-tbl td { padding:3px 6px; border:1px solid var(--border); }
-      .ai-tbl tr:first-child td { font-weight:600; background:var(--surface-2); }
+      .ai-tbl th,.ai-tbl td { padding:3px 6px; border:1px solid var(--border); text-align:left; vertical-align:top; }
+      .ai-tbl th { font-weight:600; background:var(--surface-2); }
       .ai-dots span { animation:blink 1.4s infinite both; font-size:18px; color:var(--text3); }
       .ai-dots span:nth-child(2) { animation-delay:.2s; }
       .ai-dots span:nth-child(3) { animation-delay:.4s; }
@@ -2153,12 +2215,24 @@
       #ai-input::placeholder { color:var(--text3); }
       #ai-send { width:36px; height:36px; border-radius:50%; border:none; background:var(--accent); color:white; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:transform .15s; flex-shrink:0; }
       #ai-send:hover { transform:scale(1.1); }
-      /* When AI is open: ship card moves to top-right, collapses */
-      :root.ai-open #vcard.open { top:calc(var(--topbar-h) + 5px); right:5px; max-height:48px; overflow:hidden; opacity:.85; transition:all .22s ease; }
-      :root.ai-open #vcard.open:hover { max-height:calc(100vh - var(--topbar-h) - 24px); opacity:1; }
-      /* Coord: shift right when vlist open on desktop */
-      :root.vlist-open #coord-display { left:370px; }
-      @media(max-width:500px) { #ai-chat { bottom:64px; right:8px; } #ai-panel { width:calc(100vw - 16px); right:-4px; max-height:60vh; } :root.ai-open #vcard.open { display:none; } }
+      /* FAB stays on the map edge; panel moves independently beside the ship card. */
+      :root.vcard-open #ai-chat { right:var(--map-edge); }
+      @media(min-width:1101px) {
+        :root.vcard-open.ai-open #ai-panel {
+          position:fixed; top:calc(var(--topbar-h) + var(--map-edge));
+          right:calc(var(--right-panel-offset) + var(--shipcard-w) + var(--panel-gap));
+          bottom:auto; width:var(--ai-panel-w); height:var(--panel-h); max-height:none;
+        }
+      }
+      @media(max-width:1100px) {
+        :root.vcard-open #ai-chat { right:var(--map-edge); }
+        #ai-panel { width:min(380px, calc(100vw - 32px)); }
+      }
+      @media(max-width:600px) {
+        #ai-chat, :root.vcard-open #ai-chat { bottom:64px; right:8px; }
+        #ai-panel { width:calc(100vw - 16px); right:0; max-height:50vh; }
+        :root.ai-open #vcard.open { max-height:40vh; opacity:1; }
+      }
     `;
     document.head.appendChild(chatCSS);
     initChat();
