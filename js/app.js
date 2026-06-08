@@ -283,7 +283,7 @@
 
       // Coordinate quantization: only mark dirty if pixel-equivalent position changed
       if (snapshotProcessing) {
-        dirtySet.add(data.mmsi);
+        // Skip per-vessel dirty tracking during snapshot — bulk rebuild at end
       } else {
         const Q = 0.0005;
         const isNew = !featureCache.has(data.mmsi);
@@ -546,12 +546,13 @@
           sqOff = 0;
         }
       }
-      if (dirtySet.size) scheduleRender();
-      if (trailsDirty.size) scheduleTrails();
       if (snapshotQueue.length) {
         requestAnimationFrame(processTick);
       } else {
         snapshotProcessing = false;
+        // Force full feature rebuild after snapshot
+        featureCache.clear();
+        scheduleRender();
       }
     }
 
