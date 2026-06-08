@@ -89,7 +89,7 @@
 
     // Icon size factor at a given zoom — MUST match the vessels-symbol layer's icon-size stops
     function iconSizeAtZoom(z) {
-      const stops = [[5, 0.4], [9, 0.9], [12, 1.2], [16, 1.6]];
+      const stops = [[5, 0.4], [9, 0.45], [12, 0.5], [16, 0.6]];
       if (z <= stops[0][0]) return stops[0][1];
       if (z >= stops[stops.length-1][0]) return stops[stops.length-1][1];
       for (let i = 0; i < stops.length-1; i++) {
@@ -699,7 +699,7 @@
         id: 'vessels-symbol', type: 'symbol', source: 'vessels', minzoom: 5,
         layout: {
           'icon-image': ['get', 'icon'],
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 5, 0.4, 9, 0.9, 12, 1.2, 16, 1.6],
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 5, 0.4, 9, 0.45, 12, 0.5, 16, 0.6],
           'icon-rotate': ['get', 'heading'],
           'icon-rotation-alignment': 'map',
           'icon-allow-overlap': true,
