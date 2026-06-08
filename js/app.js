@@ -595,6 +595,20 @@
     }
     map.on('moveend', () => { clearTimeout(urlTimer); urlTimer = setTimeout(updateUrl, 500); });
 
+    // Coordinate + zoom display (bottom-left)
+    const coordEl = document.createElement('div');
+    coordEl.id = 'coord-display';
+    coordEl.style.cssText = 'position:absolute;bottom:8px;left:8px;background:rgba(8,17,31,.8);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:4px 10px;font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:#93a4bd;pointer-events:none;z-index:2;backdrop-filter:blur(4px)';
+    document.getElementById('map').appendChild(coordEl);
+    function updateCoord(lng, lat) {
+      const z = map.getZoom().toFixed(1);
+      const ns = lat >= 0 ? 'N' : 'S';
+      const ew = lng >= 0 ? 'E' : 'W';
+      coordEl.textContent = `${Math.abs(lat).toFixed(4)}°${ns}  ${Math.abs(lng).toFixed(4)}°${ew}  Z${z}`;
+    }
+    map.on('mousemove', e => updateCoord(e.lngLat.lng, e.lngLat.lat));
+    map.on('move', () => { const c = map.getCenter(); updateCoord(c.lng, c.lat); });
+
 
     // Populate style selector
     function buildMapMenu() {
