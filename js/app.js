@@ -1951,7 +1951,7 @@
     // ═══════════════════════════════════════════════════════════════
     // AI CHAT
     // ═══════════════════════════════════════════════════════════════
-    const CHAT_API = 'https://ai.hpradar.com/api/chat';
+    const CHAT_API = 'https://ai.hpradar.com/chat';
     const chatHistory = [];
     let chatOpen = false;
 
