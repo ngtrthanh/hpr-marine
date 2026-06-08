@@ -715,8 +715,8 @@
           'text-color': labelColors().text,
           'text-halo-color': labelColors().halo,
           'text-halo-width': 1.6,
-          'icon-opacity': ['interpolate', ['linear'], ['zoom'], 11.5, 1, 13, 0],
-          'text-opacity': ['interpolate', ['linear'], ['zoom'], 11.5, 1, 13, 0]
+          'icon-opacity': ['interpolate', ['linear'], ['zoom'], 13.5, 1, 15, 0],
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 13.5, 1, 15, 0]
         }
       });
 
@@ -1287,8 +1287,8 @@
           if (L < 5 || L > 500 || W < 2 || W > 100) continue;
           const ratio = L / W;
           if (ratio < 1.5 || ratio > 12) continue;
-          // Size gate: render hull only when its beam exceeds 1.5× the icon width on screen
-          if ((W / mPerPx) < iconWpx * 1.5) continue;
+          // Size gate: render hull only when its beam exceeds 4px on screen
+          if ((W / mPerPx) < 4) continue;
           if (!matchesFilter(mmsi, v)) continue;
           // Heading
           const hdgDeg = v.hdg !== undefined && v.hdg < 360 ? v.hdg : (v.cog !== undefined && v.cog < 360 && v.sog > 1 ? v.cog : undefined);
