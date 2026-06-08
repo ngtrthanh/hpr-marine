@@ -2162,3 +2162,40 @@
     `;
     document.head.appendChild(chatCSS);
     initChat();
+
+    // AI deep-dive from ship card
+    function aiDeepDive() {
+      if (!selectedMmsi) return;
+      const v = vessels.get(selectedMmsi);
+      if (!v) return;
+      const mmsi = selectedMmsi;
+      const name = v.name || 'MMSI ' + mmsi;
+      const cat = shipCategory(v.shiptype, mmsi);
+      const ctx = `Tell me everything about ${name} (MMSI ${mmsi}, ${cat}, at ${v.lat?.toFixed(4)}°/${v.lon?.toFixed(4)}°, SOG ${v.sog?.toFixed(1) || 0}kn)`;
+
+      // Open AI panel
+      chatOpen = true;
+      document.getElementById('ai-panel').classList.remove('ai-hidden');
+      document.getElementById('ai-fab').classList.add('ai-active');
+      document.documentElement.classList.add('ai-open');
+
+      // Reset and set vessel-specific suggestions
+      chatHistory.length = 0;
+      const vesselSugs = [
+        `Tell me about ${name}`,
+        `What vessels are near ${name}?`,
+        `Where is ${name} heading?`,
+        `Weather at this position`,
+        `Show similar ${cat} ships nearby`,
+      ];
+      const msgs = document.getElementById('ai-messages');
+      msgs.innerHTML = `<div class="ai-welcome"><p><strong>${name}</strong> — ${cat}</p><div id="ai-suggestions">${vesselSugs.map(q => `<button class="ai-sug">${q}</button>`).join('')}</div></div>`;
+      document.querySelectorAll('.ai-sug').forEach(btn => {
+        btn.onclick = () => { document.getElementById('ai-input').value = btn.textContent; document.getElementById('ai-send').click(); };
+      });
+
+      // Pre-inject context into history so AI knows the vessel
+      chatHistory.push({ role: 'user', content: ctx });
+      chatHistory.push({ role: 'assistant', content: `I have ${name} (MMSI ${mmsi}) in view. What would you like to know?` });
+    }
+    window.aiDeepDive = aiDeepDive;
