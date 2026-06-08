@@ -273,7 +273,8 @@
 
 
     /* ── MapLibre control positioning ── */
-    .maplibregl-ctrl-top-right { top: calc(var(--topbar-h) + 10px) !important; right: 10px !important }
+    .maplibregl-ctrl-top-right { top: calc(var(--topbar-h) + 10px) !important; right: 10px !important; padding:0 !important; }
+    .maplibregl-ctrl-top-right .maplibregl-ctrl { margin:0 0 10px 0 !important; }
     .maplibregl-ctrl-bottom-right { right: var(--map-edge) !important }
 
     #coord-display {
