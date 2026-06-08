@@ -948,7 +948,6 @@
       document.getElementById('railListBtn').classList.toggle('on', vl.classList.contains('open'));
       document.documentElement.classList.toggle('vlist-open', vl.classList.contains('open'));
       const isOpen = vl.classList.contains('open');
-      if (window.innerWidth <= 600) coordEl.style.opacity = isOpen ? '0' : '1';
       if (isOpen) {
         if (window.innerWidth <= 600) { document.getElementById('vcard').classList.remove('open'); }
         lastVlistRender = 0; renderVesselList();
@@ -1996,8 +1995,8 @@
       const newBtn = document.getElementById('ai-new');
       const msgs = document.getElementById('ai-messages');
 
-      fab.onclick = () => { chatOpen = !chatOpen; panel.classList.toggle('ai-hidden', !chatOpen); fab.classList.toggle('ai-active', chatOpen); if (chatOpen) input.focus(); };
-      closeBtn.onclick = () => { chatOpen = false; panel.classList.add('ai-hidden'); fab.classList.remove('ai-active'); };
+      fab.onclick = () => { chatOpen = !chatOpen; panel.classList.toggle('ai-hidden', !chatOpen); fab.classList.toggle('ai-active', chatOpen); if (chatOpen) { input.focus(); document.documentElement.classList.add('ai-open'); } else { document.documentElement.classList.remove('ai-open'); } };
+      closeBtn.onclick = () => { chatOpen = false; panel.classList.add('ai-hidden'); fab.classList.remove('ai-active'); document.documentElement.classList.remove('ai-open'); };
       newBtn.onclick = () => {
         chatHistory.length = 0;
         msgs.innerHTML = `<div class="ai-welcome"><p>Ask me anything about vessels, traffic, or weather.</p><div id="ai-suggestions">${SUGGESTED_QS.map(q => `<button class="ai-sug">${q}</button>`).join('')}</div></div>`;
@@ -2034,7 +2033,7 @@
           const data = await resp.json();
           const reply = data.content || data.error || 'No response';
           chatHistory.push({ role: 'assistant', content: reply });
-          loader.textContent = reply;
+          loader.innerHTML = renderMd(reply);
         } catch (e) {
           loader.textContent = 'Connection error — retrying may help.';
         }
@@ -2047,17 +2046,33 @@
       function appendMsg(role, text) {
         const div = document.createElement('div');
         div.className = 'ai-msg ai-' + role;
-        if (text) div.textContent = text;
+        if (text) {
+          if (role === 'ai') div.innerHTML = renderMd(text);
+          else div.textContent = text;
+        }
         msgs.appendChild(div);
         msgs.scrollTop = msgs.scrollHeight;
         return div;
       }
     }
 
+    function renderMd(s) {
+      return s
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/`(.+?)`/g, '<code>$1</code>')
+        .replace(/^\|(.+)\|$/gm, (m, row) => '<tr>' + row.split('|').map(c => `<td>${c.trim()}</td>`).join('') + '</tr>')
+        .replace(/(<tr>.*<\/tr>\n?)+/g, '<table class="ai-tbl">$&</table>')
+        .replace(/^\* (.+)$/gm, '<li>$1</li>')
+        .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+        .replace(/\n/g, '<br>');
+    }
+
     // Inject chat styles
     const chatCSS = document.createElement('style');
     chatCSS.textContent = `
-      #ai-chat { position:fixed; bottom:72px; right:16px; z-index:9990; font-family:'Inter',system-ui,sans-serif; }
+      #ai-chat { position:fixed; bottom:16px; right:16px; z-index:9990; font-family:'Inter',system-ui,sans-serif; }
       #ai-fab { width:44px; height:44px; border-radius:var(--r-lg); border:1px solid var(--border); background:var(--surface); color:var(--accent); display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:var(--e2); transition:all .2s; }
       #ai-fab:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,0,0,.3); }
       #ai-fab.ai-active { background:var(--accent); color:var(--bg); border-color:var(--accent); }
@@ -2078,6 +2093,13 @@
       .ai-msg { margin-bottom:10px; padding:10px 14px; border-radius:var(--r-lg); font-size:var(--fs-sm); line-height:1.6; word-wrap:break-word; white-space:pre-wrap; }
       .ai-user { background:var(--accent); color:white; margin-left:60px; border-bottom-right-radius:4px; }
       .ai-ai { background:var(--surface-3); color:var(--text); margin-right:40px; border-bottom-left-radius:4px; border:1px solid var(--border); }
+      .ai-ai strong { color:var(--accent); }
+      .ai-ai code { background:var(--surface-2); padding:1px 4px; border-radius:3px; font-size:11px; }
+      .ai-ai ul { margin:4px 0; padding-left:16px; }
+      .ai-ai li { margin:2px 0; }
+      .ai-tbl { width:100%; border-collapse:collapse; margin:6px 0; font-size:11px; }
+      .ai-tbl td { padding:3px 6px; border:1px solid var(--border); }
+      .ai-tbl tr:first-child td { font-weight:600; background:var(--surface-2); }
       .ai-dots span { animation:blink 1.4s infinite both; font-size:18px; color:var(--text3); }
       .ai-dots span:nth-child(2) { animation-delay:.2s; }
       .ai-dots span:nth-child(3) { animation-delay:.4s; }
@@ -2088,7 +2110,12 @@
       #ai-input::placeholder { color:var(--text3); }
       #ai-send { width:36px; height:36px; border-radius:50%; border:none; background:var(--accent); color:white; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:transform .15s; flex-shrink:0; }
       #ai-send:hover { transform:scale(1.1); }
-      @media(max-width:500px) { #ai-chat { bottom:64px; right:8px; } #ai-panel { width:calc(100vw - 16px); right:-4px; max-height:60vh; } }
+      /* When AI is open: ship card moves to top-right, collapses */
+      :root.ai-open #vcard.open { top:calc(var(--topbar-h) + 5px); right:5px; max-height:48px; overflow:hidden; opacity:.85; transition:all .22s ease; }
+      :root.ai-open #vcard.open:hover { max-height:calc(100vh - var(--topbar-h) - 24px); opacity:1; }
+      /* Coord: shift right when vlist open on desktop */
+      :root.vlist-open #coord-display { left:370px; }
+      @media(max-width:500px) { #ai-chat { bottom:64px; right:8px; } #ai-panel { width:calc(100vw - 16px); right:-4px; max-height:60vh; } :root.ai-open #vcard.open { display:none; } }
     `;
     document.head.appendChild(chatCSS);
     initChat();
