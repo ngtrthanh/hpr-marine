@@ -669,9 +669,14 @@
         paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 0.3, 15, 1, 18, 2], 'line-opacity': 0.8 }
       });
       // GPS antenna circle
+      // GPS antenna dot (green blip)
+      map.addLayer({
+        id: 'antennas-pulse', type: 'circle', source: 'antennas', minzoom: 12,
+        paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 3, 15, 6, 18, 10], 'circle-color': '#41d392', 'circle-opacity': 0, 'circle-stroke-width': 0 }
+      });
       map.addLayer({
         id: 'antennas-circle', type: 'circle', source: 'antennas', minzoom: 12,
-        paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 1.5, 15, 3, 18, 5], 'circle-color': '#f59e0b', 'circle-stroke-color': '#111827', 'circle-stroke-width': 1 }
+        paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 2, 15, 3.5, 18, 5], 'circle-color': '#41d392', 'circle-stroke-color': '#0a2a1a', 'circle-stroke-width': 1 }
       });
 
       // Vessel names at high zoom (hull view — for vessels with dimensions)
@@ -710,7 +715,8 @@
           'text-color': labelColors().text,
           'text-halo-color': labelColors().halo,
           'text-halo-width': 1.6,
-          'icon-opacity': ['match', ['get', 'trust'], 'live', 1, 'aging', 0.7, 'stale', 0.4, 1]
+          'icon-opacity': ['interpolate', ['linear'], ['zoom'], 11.5, 1, 13, 0],
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 11.5, 1, 13, 0]
         }
       });
 
@@ -791,10 +797,25 @@
       // Click handler
       map.on('click', 'vessels-circle', onVesselClick);
       map.on('click', 'vessels-symbol', onVesselClick);
+      map.on('click', 'antennas-circle', onVesselClick);
       map.on('mouseenter', 'vessels-circle', (e) => { map.getCanvas().style.cursor = 'pointer'; showPopup(e); });
       map.on('mouseleave', 'vessels-circle', () => { map.getCanvas().style.cursor = ''; hidePopup(); });
       map.on('mouseenter', 'vessels-symbol', (e) => { map.getCanvas().style.cursor = 'pointer'; showPopup(e); });
       map.on('mouseleave', 'vessels-symbol', () => { map.getCanvas().style.cursor = ''; hidePopup(); });
+      map.on('mouseenter', 'antennas-circle', (e) => { map.getCanvas().style.cursor = 'pointer'; showPopup(e); });
+      map.on('mouseleave', 'antennas-circle', () => { map.getCanvas().style.cursor = ''; hidePopup(); });
+
+      // Green blip animation on antenna pulse layer
+      let blipPhase = 0;
+      function animateBlip() {
+        blipPhase = (blipPhase + 0.02) % 1;
+        const r = 1 + blipPhase * 8;
+        const opacity = 0.6 * (1 - blipPhase);
+        map.setPaintProperty('antennas-pulse', 'circle-radius', ['interpolate', ['linear'], ['zoom'], 12, r, 15, r * 1.5, 18, r * 2.5]);
+        map.setPaintProperty('antennas-pulse', 'circle-opacity', opacity);
+        requestAnimationFrame(animateBlip);
+      }
+      animateBlip();
 
       // ── Event-driven render ──
       document.addEventListener('visibilitychange', () => {
