@@ -49,14 +49,15 @@
       fishing: '#FFA800', tug: '#E32913', sailing: '#2dd4bf',
       pilot: '#15375D', hsc: '#60a5fa', pleasure: '#C8C8D1',
       sar: '#EBE32B', law: '#ECE42B', medical: '#EBE32B',
-      military: '#7B9A68', dive: '#22d3ee', dredging: '#56A752', unknown: '#98989B',
-      sar_aircraft: '#f59e0b', helicopter: '#f59e0b'
+      military: '#7B9A68', dive: '#22d3ee', dredging: '#56A752',
+      sar_aircraft: '#f59e0b', helicopter: '#f59e0b',
+      seismic: '#a78bfa', platform: '#78716c', unknown: '#98989B'
     };
 
     function shipCategory(type, mmsi) {
       // SAR aircraft: MMSI starts with 111
       if (mmsi && String(mmsi).startsWith('111')) return 'sar_aircraft';
-      // SAR helicopter: MMSI starts with 970
+      // Helicopter/SART: MMSI starts with 970
       if (mmsi && String(mmsi).startsWith('970')) return 'helicopter';
       if (type == null || type === 0) return 'unknown';
       if (type >= 70 && type <= 79) return 'cargo';
@@ -65,17 +66,24 @@
       if (type >= 40 && type <= 49) return 'hsc';
       if (type >= 20 && type <= 29) return 'hsc'; // WIG craft
       if (type === 30) return 'fishing';
-      if (type === 31 || type === 32 || type === 52) return 'tug';
+      if (type === 31 || type === 32) return 'tug';
       if (type === 33) return 'dredging';
       if (type === 34) return 'dive';
       if (type === 35) return 'military';
-      if (type === 36 || type === 37) return 'sailing';
+      if (type === 36) return 'sailing';
+      if (type === 37) return 'pleasure';
+      if (type === 38) return 'seismic';
       if (type === 50) return 'pilot';
       if (type === 51) return 'sar';
+      if (type === 52) return 'tug';
       if (type === 53) return 'tug'; // port tender
-      if (type === 54) return 'tug'; // anti-pollution
+      if (type === 54) return 'platform'; // anti-pollution / platform
       if (type === 55) return 'law';
+      if (type === 56) return 'platform'; // spare - local vessel
+      if (type === 57) return 'platform'; // spare - local vessel
       if (type === 58) return 'medical';
+      if (type === 59) return 'platform'; // other type
+      if (type >= 90 && type <= 99) return 'platform'; // other
       return 'unknown';
     }
 
@@ -1617,12 +1625,13 @@
       return 'buoy';
     }
     const FALLBACK_PREFIX = {
-      cargo:'Cargo-vessel',tanker:'Tanker',passenger:'Passenger',fishing:'Fishing-vessel',
-      tug:'Tug',pilot:'Pilot-vessel',hsc:'High-speed-craft',sailing:'Pleasure-craft-0',
-      pleasure:'Pleasure-craft-00',sar:'Search-and-rescue',law:'Law-enforcement',
-      medical:'Medical-transport',military:'Military',dive:'Dive-vessel',
-      dredging:'Dredging-or-underwater-ops',platform:'Platform',unknown:'Other-vessel-type',
-      sar_aircraft:'Aircraft',helicopter:'Helicopter',
+      fishing:'Fishing-vessel',sar:'Search-and-rescue',tanker:'Tanker',
+      passenger:'Passenger',hsc:'High-speed-craft',dive:'Dive-vessel',
+      medical:'Medical-transport',cargo:'Cargo-vessel',helicopter:'Helicopter',
+      tug:'Tug',law:'Law-enforcement',pilot:'Pilot-vessel',platform:'Platform',
+      sar_aircraft:'Aircraft',military:'Military',seismic:'Seismic-survey-vessel',
+      pleasure:'Pleasure-craft-0',sailing:'Pleasure-craft-0',
+      dredging:'Dredging-or-underwater-ops',unknown:'Other-vessel-type',
     };
     const ATON_FALLBACK_SVG = null; // uses ATON_ICON_MAP directly
     function fetchVesselPhoto(imo, mmsi) {
