@@ -598,7 +598,7 @@
     // Coordinate + zoom display (bottom-left)
     const coordEl = document.createElement('div');
     coordEl.id = 'coord-display';
-    coordEl.style.cssText = 'position:absolute;bottom:4px;left:8px;background:none;padding:2px 6px;font:10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text2);pointer-events:none;z-index:2;text-shadow:0 1px 3px var(--bg),0 0 6px var(--bg)';
+    coordEl.style.cssText = 'position:absolute;bottom:4px;left:8px;background:none;padding:2px 6px;font:10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text2);pointer-events:none;z-index:2;text-shadow:0 1px 3px var(--bg),0 0 6px var(--bg);transition:opacity .2s';
     document.getElementById('map').appendChild(coordEl);
     function updateCoord(lng, lat) {
       const z = map.getZoom().toFixed(1);
@@ -947,7 +947,9 @@
       vl.classList.toggle('open');
       document.getElementById('railListBtn').classList.toggle('on', vl.classList.contains('open'));
       document.documentElement.classList.toggle('vlist-open', vl.classList.contains('open'));
-      if (vl.classList.contains('open')) {
+      const isOpen = vl.classList.contains('open');
+      if (window.innerWidth <= 600) coordEl.style.opacity = isOpen ? '0' : '1';
+      if (isOpen) {
         if (window.innerWidth <= 600) { document.getElementById('vcard').classList.remove('open'); }
         lastVlistRender = 0; renderVesselList();
       }
@@ -1971,7 +1973,7 @@
         <div id="ai-panel" class="ai-hidden">
           <div id="ai-header">
             <div class="ai-hdr-left"><svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Marine AI</span></div>
-            <button id="ai-close" aria-label="Close">×</button>
+            <div class="ai-hdr-right"><button id="ai-new" title="New chat">⟳</button><button id="ai-close" aria-label="Close">×</button></div>
           </div>
           <div id="ai-messages">
             <div class="ai-welcome">
@@ -1991,10 +1993,17 @@
       const input = document.getElementById('ai-input');
       const sendBtn = document.getElementById('ai-send');
       const closeBtn = document.getElementById('ai-close');
+      const newBtn = document.getElementById('ai-new');
       const msgs = document.getElementById('ai-messages');
 
       fab.onclick = () => { chatOpen = !chatOpen; panel.classList.toggle('ai-hidden', !chatOpen); fab.classList.toggle('ai-active', chatOpen); if (chatOpen) input.focus(); };
       closeBtn.onclick = () => { chatOpen = false; panel.classList.add('ai-hidden'); fab.classList.remove('ai-active'); };
+      newBtn.onclick = () => {
+        chatHistory.length = 0;
+        msgs.innerHTML = `<div class="ai-welcome"><p>Ask me anything about vessels, traffic, or weather.</p><div id="ai-suggestions">${SUGGESTED_QS.map(q => `<button class="ai-sug">${q}</button>`).join('')}</div></div>`;
+        document.querySelectorAll('.ai-sug').forEach(btn => { btn.onclick = () => { input.value = btn.textContent; send(); }; });
+        input.focus();
+      };
 
       // Suggested questions
       document.querySelectorAll('.ai-sug').forEach(btn => {
@@ -2059,6 +2068,7 @@
       .ai-hdr-left svg { color:var(--accent); }
       #ai-header button { background:none; border:none; color:var(--text3); font-size:20px; cursor:pointer; line-height:1; padding:2px 6px; border-radius:4px; }
       #ai-header button:hover { background:var(--surface-3); }
+      .ai-hdr-right { display:flex; align-items:center; gap:2px; }
       #ai-messages { flex:1; overflow-y:auto; padding:16px; min-height:220px; max-height:380px; }
       .ai-welcome { text-align:center; padding:20px 10px; }
       .ai-welcome p { color:var(--text3); font-size:var(--fs-sm); margin-bottom:16px; }
