@@ -242,15 +242,26 @@
       if (data.lat !== undefined && (data.lat > 90 || data.lat < -90 || data.lat === 91)) return;
       if (data.lon === 0 && data.lat === 0) return; // Null Island — invalid GPS
 
-      const existing = vessels.get(data.mmsi) || {};
-      const merged = { ...existing, ...data, ts: Date.now() };
-      if (!data.name && existing.name) merged.name = existing.name;
-      if ((!data.shiptype || data.shiptype === 0) && existing.shiptype) merged.shiptype = existing.shiptype;
+      let merged = vessels.get(data.mmsi);
+      if (merged) {
+        const oldLon = merged.lon, oldLat = merged.lat;
+        for (const k in data) merged[k] = data[k];
+        merged.ts = Date.now();
+        // Update spatial grid
+        if (data.lon !== undefined && data.lat !== undefined) {
+          if (oldLon !== undefined) gridRemove(data.mmsi, oldLon, oldLat);
+          gridAdd(data.mmsi, merged.lon, merged.lat);
+        }
+      } else {
+        merged = { ...data, ts: Date.now() };
+        vessels.set(data.mmsi, merged);
+        if (data.lon !== undefined && data.lat !== undefined) {
+          gridAdd(data.mmsi, merged.lon, merged.lat);
+        }
+      }
 
-      // Store trail (only for position updates on non-AtoN)
-      if (data.lon !== undefined && data.lat !== undefined && !data.isAton &&
-          data.lon >= -180 && data.lon <= 180 && data.lat >= -90 && data.lat <= 90 &&
-          !(data.lon === 0 && data.lat === 0)) {
+      // Store trail (skip during snapshot loading for perf)
+      if (!snapshotProcessing && data.lon !== undefined && data.lat !== undefined && !data.isAton) {
         if (!merged.trail) merged.trail = [];
         if (!merged.trailTs) merged.trailTs = 0;
         const last = merged.trail[merged.trail.length - 1];
@@ -270,23 +281,17 @@
         }
       }
 
-      // Update spatial grid
-      if (data.lon !== undefined && data.lat !== undefined) {
-        if (existing.lon !== undefined) gridRemove(data.mmsi, existing.lon, existing.lat);
-        gridAdd(data.mmsi, merged.lon, merged.lat);
-      }
-
-      vessels.set(data.mmsi, merged);
       // Coordinate quantization: only mark dirty if pixel-equivalent position changed
-      // At zoom 10, 1px ≈ 0.001°; at zoom 15, 1px ≈ 0.00003°. Use 0.0005° (covers zoom 5-12 nicely)
-      const Q = 0.0005;
-      const posChanged = !existing.lon ||
-        Math.round(merged.lon / Q) !== Math.round(existing.lon / Q) ||
-        Math.round(merged.lat / Q) !== Math.round(existing.lat / Q);
-      const staticChanged = (data.name && data.name !== existing.name) ||
-        (data.shiptype && data.shiptype !== existing.shiptype);
-      if (posChanged || staticChanged || !featureCache.has(data.mmsi)) {
+      if (snapshotProcessing) {
         dirtySet.add(data.mmsi);
+      } else {
+        const Q = 0.0005;
+        const isNew = !featureCache.has(data.mmsi);
+        const posChanged = data.lon !== undefined;
+        const staticChanged = data.name !== undefined || data.shiptype !== undefined;
+        if (isNew || posChanged || staticChanged) {
+          dirtySet.add(data.mmsi);
+        }
       }
       // Mark for IDB save if static data arrived
       if (data.name !== undefined || data.shiptype !== undefined || data.callsign !== undefined) {
