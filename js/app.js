@@ -551,7 +551,7 @@
       } else {
         snapshotProcessing = false;
         // Force full feature rebuild after snapshot
-        featureCache.clear();
+        lastFilterText = null; // triggers filterChanged path in renderVessels
         scheduleRender();
       }
     }
