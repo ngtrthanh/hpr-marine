@@ -865,7 +865,7 @@
     function renderChips() {
       const box = document.getElementById('chips');
       const counts = {};
-      for (const v of vessels.values()) {
+      for (const [mmsi, v] of vessels) {
         const cat = v.isAton ? 'aton' : shipCategory(v.shiptype, mmsi);
         counts[cat] = (counts[cat] || 0) + 1;
       }
