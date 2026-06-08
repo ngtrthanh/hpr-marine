@@ -49,10 +49,15 @@
       fishing: '#FFA800', tug: '#E32913', sailing: '#2dd4bf',
       pilot: '#15375D', hsc: '#60a5fa', pleasure: '#C8C8D1',
       sar: '#EBE32B', law: '#ECE42B', medical: '#EBE32B',
-      military: '#7B9A68', dive: '#22d3ee', dredging: '#56A752', unknown: '#98989B'
+      military: '#7B9A68', dive: '#22d3ee', dredging: '#56A752', unknown: '#98989B',
+      sar_aircraft: '#f59e0b', helicopter: '#f59e0b'
     };
 
-    function shipCategory(type) {
+    function shipCategory(type, mmsi) {
+      // SAR aircraft: MMSI starts with 111
+      if (mmsi && String(mmsi).startsWith('111')) return 'sar_aircraft';
+      // SAR helicopter: MMSI starts with 970
+      if (mmsi && String(mmsi).startsWith('970')) return 'helicopter';
       if (type == null || type === 0) return 'unknown';
       if (type >= 70 && type <= 79) return 'cargo';
       if (type >= 80 && type <= 89) return 'tanker';
@@ -818,7 +823,7 @@
       const box = document.getElementById('chips');
       const counts = {};
       for (const v of vessels.values()) {
-        const cat = v.isAton ? 'aton' : shipCategory(v.shiptype);
+        const cat = v.isAton ? 'aton' : shipCategory(v.shiptype, mmsi);
         counts[cat] = (counts[cat] || 0) + 1;
       }
       // Only rebuild DOM if chips don't exist yet
@@ -866,7 +871,7 @@
       if (!results.length) { box.innerHTML = `<div class="vlist-empty" style="padding:10px">No matches for ${esc(q)}</div>`; box.style.display = 'block'; return; }
       searchIdx = -1;
       box.innerHTML = results.map(([mmsi, v], i) => {
-        const cat = shipCategory(v.shiptype);
+        const cat = shipCategory(v.shiptype, mmsi);
         return `<div class="search-item" data-i="${i}" onmousedown="flyToVessel(${mmsi})" style="padding:6px 10px;cursor:pointer;font-size:11px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between"><span>${esc(v.name || ("MMSI " + mmsi))}</span><span style="color:var(--text3)">${cat}</span></div>`;
       }).join('');
       box.style.display = 'block';
@@ -911,7 +916,7 @@
     }
     function vrowHtml(mmsi, v) {
       const st = ageState(v.ts);
-      const cat = v.isAton ? 'aton' : shipCategory(v.shiptype);
+      const cat = v.isAton ? 'aton' : shipCategory(v.shiptype, mmsi);
       const name = v.name || (v.isAton ? 'AtoN ' + mmsi : 'MMSI ' + mmsi);
       const typeTxt = v.isAton ? 'AtoN' : (v.classDesc || cat.charAt(0).toUpperCase() + cat.slice(1));
       const spd = (!v.isAton && v.sog !== undefined) ? ' · ' + fmtSpeed(v.sog) : '';
@@ -982,7 +987,7 @@
       rowsEl.innerHTML = html;
     }
     function matchesFilter(mmsi, v) {
-      const cat = v.isAton ? 'aton' : shipCategory(v.shiptype);
+      const cat = v.isAton ? 'aton' : shipCategory(v.shiptype, mmsi);
       if (filterCats.size && !filterCats.has(cat)) return false;
       if (!filterText) return true;
       return String(mmsi).includes(filterText) || (v.name||'').toLowerCase().includes(filterText) || cat.includes(filterText) || (v.callsign||'').toLowerCase().includes(filterText) || (v.destination||'').toLowerCase().includes(filterText) || (v.flagCountry||'').toLowerCase().includes(filterText) || (v.imo ? String(v.imo).includes(filterText) : false);
@@ -1109,7 +1114,7 @@
     function buildFeature(mmsi, v) {
       // Reuse existing feature object if available (mutate in-place)
       let f = featureCache.get(mmsi);
-      const cat = v.isAton ? 'aton' : shipCategory(v.shiptype);
+      const cat = v.isAton ? 'aton' : shipCategory(v.shiptype, mmsi);
       const color = v.isAton ? '#e879f9' : (TYPE_COLORS[cat] || TYPE_COLORS.unknown);
       const icon = v.isAton ? atonIcon(v.atonType) : 'icon-' + cat;
       const heading = v.isAton ? 0 : (v.hdg !== undefined && v.hdg < 360 ? v.hdg : (v.cog !== undefined && v.cog < 360 ? v.cog : 0));
@@ -1179,7 +1184,7 @@
       if (selectedMmsi) {
         const v = vessels.get(selectedMmsi);
         if (v && v.trail && v.trail.length > 1) {
-          const cat = shipCategory(v.shiptype);
+          const cat = shipCategory(v.shiptype, mmsi);
           const color = TYPE_COLORS[cat] || TYPE_COLORS.unknown;
           let seg = [v.trail[0]];
           for (let i = 1; i < v.trail.length; i++) {
@@ -1249,7 +1254,7 @@
           const sin = Math.sin(rad), cos = Math.cos(rad);
           const pt = (x, y) => [v.lon + (x*cos + y*sin)*mLon, v.lat + (-x*sin + y*cos)*mLat];
           // Shape by type
-          const cat = shipCategory(v.shiptype);
+          const cat = shipCategory(v.shiptype, mmsi);
           const p = hullPresets[cat] || hullPresets.cargo;
           // Center hull on ship's longitudinal axis (antenna offset from centerline)
           const halfW = (C + D) / 2;
@@ -1511,7 +1516,7 @@
         html += `<div class="sc-motion"><div class="mc"><span class="mv">${v.lat.toFixed(4)}°</span><span class="ml">Lat</span></div><div class="mc"><span class="mv">${v.lon.toFixed(4)}°</span><span class="ml">Lon</span></div><div class="mc"><span class="mv">${fmtAge(v.ts)}</span><span class="ml">Age</span></div></div>`
           + `<div class="sc-id"><div class="ic"><span class="iv">${mmsi}</span><span class="il">MMSI</span></div><div class="ic"><span class="iv">—</span><span class="il">Type</span></div><div class="ic"><span class="iv">${v.atonType||0}</span><span class="il">AtoN ID</span></div></div>`;
       } else {
-        const cat = shipCategory(v.shiptype);
+        const cat = shipCategory(v.shiptype, mmsi);
         const moving = v.sog !== undefined && v.sog > 0.5;
         const typeTxt = v.classDesc || cat.charAt(0).toUpperCase() + cat.slice(1);
         document.getElementById('pType').textContent = typeTxt;
@@ -1617,6 +1622,7 @@
       pleasure:'Pleasure-craft-00',sar:'Search-and-rescue',law:'Law-enforcement',
       medical:'Medical-transport',military:'Military',dive:'Dive-vessel',
       dredging:'Dredging-or-underwater-ops',platform:'Platform',unknown:'Other-vessel-type',
+      sar_aircraft:'Aircraft',helicopter:'Helicopter',
     };
     const ATON_FALLBACK_SVG = null; // uses ATON_ICON_MAP directly
     function fetchVesselPhoto(imo, mmsi) {
@@ -1638,7 +1644,7 @@
           html = `<div class="aton-photo-fallback"><img src="./icons/${svg}.svg" alt=""></div>`;
         }
       } else {
-        const cat = shipCategory(v?.shiptype);
+        const cat = shipCategory(v?.shiptype, mmsi);
         const p = typePhotos[cat];
         const url = p&&p.length ? pick(p) : `./photos/${FALLBACK_PREFIX[cat]||'Other-vessel-type'}.jpg`;
         html = `<img src="${url}" alt="" loading="lazy"><span class="photo-disclaimer">Illustration only</span>`;
@@ -1811,7 +1817,7 @@
       const v = vessels.get(mmsi);
       if (!v) return;
       const coords = [v.lon, v.lat];
-      const cat = v.isAton ? 'AtoN' : shipCategory(v.shiptype).toUpperCase();
+      const cat = v.isAton ? 'AtoN' : shipCategory(v.shiptype, mmsi).toUpperCase();
       popup.setLngLat(coords).setHTML(
         `<div class="pop-title">${flagHtml(mmsi)} ${esc(v.name || mmsi)}</div>` +
         `<div class="pop-row"><span class="l">MMSI</span><span class="v">${mmsi}</span></div>` +
