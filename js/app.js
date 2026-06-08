@@ -517,24 +517,55 @@
     // Binary frame parser (zero NMEA decode — frames are pre-parsed by server)
     function onBinaryMsg(ev) {
       if (paused) return;
-      const buf = ev.data;
+      snapshotQueue.push(ev.data);
+      if (!snapshotProcessing) drainSnapshot();
+    }
+
+    const snapshotQueue = [];
+    let snapshotProcessing = false;
+    let sqOff = 0; // offset within current buffer
+
+    function drainSnapshot() {
+      snapshotProcessing = true;
+      sqOff = 0;
+      requestAnimationFrame(processTick);
+    }
+
+    function processTick() {
+      const deadline = performance.now() + 8; // 8ms budget per frame
+      while (snapshotQueue.length && performance.now() < deadline) {
+        const buf = snapshotQueue[0];
+        sqOff = parseBinaryChunk(buf, sqOff, 200);
+        if (sqOff >= buf.byteLength) {
+          snapshotQueue.shift();
+          sqOff = 0;
+        }
+      }
+      if (dirtySet.size) scheduleRender();
+      if (trailsDirty.size) scheduleTrails();
+      if (snapshotQueue.length) {
+        requestAnimationFrame(processTick);
+      } else {
+        snapshotProcessing = false;
+      }
+    }
+
+    // Parse up to maxFrames frames starting at 'start'. Returns new offset.
+    function parseBinaryChunk(buf, start, maxFrames) {
       const view = new DataView(buf);
-      let off = 0;
-      while (off < buf.byteLength) {
+      let off = start, count = 0;
+      while (off < buf.byteLength && count < maxFrames) {
         const ft = view.getUint8(off);
         if (ft === 0x01 && off + 19 <= buf.byteLength) {
-          // Position frame: 19 bytes
           const mmsi = view.getUint32(off + 1, true);
           const lonRaw = view.getInt32(off + 5, true);
           const latRaw = view.getInt32(off + 9, true);
           const sog = view.getUint16(off + 13, true) / 10;
           const cog = view.getUint16(off + 15, true) / 10;
           const hdg = view.getUint16(off + 17, true);
-          const lon = lonRaw / 600000, lat = latRaw / 600000;
-          updateVessel({ mmsi, lon, lat, sog, cog, hdg: hdg < 511 ? hdg : undefined });
+          updateVessel({ mmsi, lon: lonRaw / 600000, lat: latRaw / 600000, sog, cog, hdg: hdg < 511 ? hdg : undefined });
           off += 19;
         } else if (ft === 0x05 && off + 44 <= buf.byteLength) {
-          // Static frame: 44 bytes
           const mmsi = view.getUint32(off + 1, true);
           const shiptype = view.getUint8(off + 5);
           const name = decodeFixedStr(buf, off + 6, 20);
@@ -553,7 +584,6 @@
           updateVessel(data);
           off += 44;
         } else if (ft === 0x15 && off + 34 <= buf.byteLength) {
-          // AtoN frame: 34 bytes
           const mmsi = view.getUint32(off + 1, true);
           const atonType = view.getUint8(off + 5);
           const lon = view.getInt32(off + 6, true) / 600000;
@@ -562,7 +592,6 @@
           updateVessel({ mmsi, atonType, name, lon, lat, isAton: true });
           off += 34;
         } else if (ft === 0x08 && off + 12 <= buf.byteLength) {
-          // Binary message frame: [0x08][mmsi:4][dac:2][fid:1][len:2][subtype:1][spare:1][payload:N]
           const mmsi = view.getUint32(off + 1, true);
           const dac = view.getUint16(off + 5, true);
           const fid = view.getUint8(off + 7);
@@ -572,12 +601,11 @@
           handleBinaryFrame(mmsi, dac, fid, subtype, new DataView(buf, off + 12, dataLen));
           off += 12 + dataLen;
         } else {
-          break; // unknown frame or truncated
+          off = buf.byteLength; break;
         }
-        msgCount++;
+        msgCount++; count++;
       }
-      if (dirtySet.size) scheduleRender();
-      if (trailsDirty.size) scheduleTrails();
+      return off;
     }
 
     const textDec = new TextDecoder();
