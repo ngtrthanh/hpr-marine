@@ -1947,3 +1947,99 @@
     // Init from hash on load
     if (location.hash === '#decoder') { currentView = 'decoder'; applyView(); }
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && currentView === 'decoder') navigate('map'); });
+
+    // ═══════════════════════════════════════════════════════════════
+    // AI CHAT
+    // ═══════════════════════════════════════════════════════════════
+    const CHAT_API = 'https://stream.hpradar.com/api/chat';
+    const chatHistory = [];
+    let chatOpen = false;
+
+    function initChat() {
+      const container = document.createElement('div');
+      container.id = 'ai-chat';
+      container.innerHTML = `
+        <button id="ai-fab" title="AI Assistant">🧭</button>
+        <div id="ai-panel" class="ai-hidden">
+          <div id="ai-header"><span>HPR Marine AI</span><button id="ai-close">×</button></div>
+          <div id="ai-messages"></div>
+          <div id="ai-input-row">
+            <input id="ai-input" type="text" placeholder="Ask about vessels, traffic, weather..." autocomplete="off">
+            <button id="ai-send">→</button>
+          </div>
+        </div>`;
+      document.body.appendChild(container);
+
+      const fab = document.getElementById('ai-fab');
+      const panel = document.getElementById('ai-panel');
+      const input = document.getElementById('ai-input');
+      const sendBtn = document.getElementById('ai-send');
+      const closeBtn = document.getElementById('ai-close');
+      const msgs = document.getElementById('ai-messages');
+
+      fab.onclick = () => { chatOpen = !chatOpen; panel.classList.toggle('ai-hidden', !chatOpen); fab.classList.toggle('ai-active', chatOpen); if (chatOpen) input.focus(); };
+      closeBtn.onclick = () => { chatOpen = false; panel.classList.add('ai-hidden'); fab.classList.remove('ai-active'); };
+
+      async function send() {
+        const text = input.value.trim();
+        if (!text) return;
+        input.value = '';
+        chatHistory.push({ role: 'user', content: text });
+        appendMsg('user', text);
+        appendMsg('ai', '...');
+
+        try {
+          const resp = await fetch(CHAT_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages: chatHistory })
+          });
+          const data = await resp.json();
+          const reply = data.content || data.error || 'No response';
+          chatHistory.push({ role: 'assistant', content: reply });
+          replaceLastMsg(reply);
+        } catch (e) {
+          replaceLastMsg('Connection error. Is the AI service running?');
+        }
+      }
+
+      sendBtn.onclick = send;
+      input.onkeydown = e => { if (e.key === 'Enter') send(); };
+
+      function appendMsg(role, text) {
+        const div = document.createElement('div');
+        div.className = 'ai-msg ai-' + role;
+        div.textContent = text;
+        msgs.appendChild(div);
+        msgs.scrollTop = msgs.scrollHeight;
+      }
+      function replaceLastMsg(text) {
+        const last = msgs.lastElementChild;
+        if (last) { last.textContent = text; msgs.scrollTop = msgs.scrollHeight; }
+      }
+    }
+
+    // Inject chat styles
+    const chatCSS = document.createElement('style');
+    chatCSS.textContent = `
+      #ai-chat { position:fixed; bottom:16px; right:16px; z-index:9999; font-family:system-ui,sans-serif; }
+      #ai-fab { width:48px; height:48px; border-radius:50%; border:none; background:#1e40af; color:white; font-size:22px; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,.4); transition:transform .2s,background .2s; }
+      #ai-fab:hover { transform:scale(1.1); }
+      #ai-fab.ai-active { background:#059669; }
+      #ai-panel { position:absolute; bottom:60px; right:0; width:360px; max-height:480px; background:#0f172a; border:1px solid rgba(255,255,255,.1); border-radius:12px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,.6); }
+      #ai-panel.ai-hidden { display:none; }
+      #ai-header { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#1e293b; border-bottom:1px solid rgba(255,255,255,.08); font-size:13px; font-weight:600; color:#e2e8f0; }
+      #ai-header button { background:none; border:none; color:#94a3b8; font-size:18px; cursor:pointer; }
+      #ai-messages { flex:1; overflow-y:auto; padding:12px; min-height:200px; max-height:340px; }
+      .ai-msg { margin-bottom:8px; padding:8px 12px; border-radius:8px; font-size:12px; line-height:1.5; word-wrap:break-word; white-space:pre-wrap; }
+      .ai-user { background:#1e3a5f; color:#bfdbfe; margin-left:40px; text-align:right; }
+      .ai-ai { background:#1e293b; color:#cbd5e1; margin-right:20px; }
+      #ai-input-row { display:flex; gap:6px; padding:10px; border-top:1px solid rgba(255,255,255,.08); background:#0f172a; }
+      #ai-input { flex:1; padding:8px 12px; border-radius:8px; border:1px solid #334155; background:#1e293b; color:#e2e8f0; font-size:12px; outline:none; }
+      #ai-input:focus { border-color:#3b82f6; }
+      #ai-send { padding:8px 12px; border-radius:8px; border:none; background:#2563eb; color:white; font-size:14px; cursor:pointer; }
+      #ai-send:hover { background:#1d4ed8; }
+      @media(max-width:500px) { #ai-panel { width:calc(100vw - 32px); right:-8px; } }
+    `;
+    document.head.appendChild(chatCSS);
+    initChat();
