@@ -1959,9 +1959,10 @@
     const SUGGESTED_QS = [
       'How many ships are you tracking?',
       'Show tankers near Singapore',
-      'Cargo vessels heading to Vietnam',
-      'Traffic stats for Malacca Strait',
-      'Busiest shipping area right now',
+      'Switch to dark mode',
+      'Zoom to Strait of Malacca',
+      'Show cargo vessels only',
+      'Switch to satellite view',
     ];
 
     function initChat() {
@@ -2034,6 +2035,7 @@
           const reply = data.content || data.error || 'No response';
           chatHistory.push({ role: 'assistant', content: reply });
           loader.innerHTML = renderMd(reply);
+          executeActions(reply);
         } catch (e) {
           loader.textContent = 'Connection error — retrying may help.';
         }
@@ -2059,6 +2061,7 @@
     function renderMd(s) {
       return s
         .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/\[action:[^\]]+\]/g, '') // strip action tags from display
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.+?)\*/g, '<em>$1</em>')
         .replace(/`(.+?)`/g, '<code>$1</code>')
@@ -2067,6 +2070,46 @@
         .replace(/^\* (.+)$/gm, '<li>$1</li>')
         .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
         .replace(/\n/g, '<br>');
+    }
+
+    function executeActions(text) {
+      const re = /\[action:(\w+):([^\]]+)\]/g;
+      let m;
+      while ((m = re.exec(text)) !== null) {
+        const [, cmd, val] = m;
+        switch (cmd) {
+          case 'theme':
+            document.documentElement.setAttribute('data-theme', val);
+            localStorage.setItem('theme', val);
+            break;
+          case 'zoom': {
+            const [lat, lon, z] = val.split(',').map(Number);
+            if (lat && lon) map.flyTo({ center: [lon, lat], zoom: z || 12 });
+            break;
+          }
+          case 'vessel': {
+            const mmsi = parseInt(val);
+            if (mmsi && vessels.has(mmsi)) flyToVessel(mmsi);
+            break;
+          }
+          case 'filter':
+            if (val === 'all') {
+              filterCats.clear();
+              document.querySelectorAll('.chip').forEach(c => c.classList.add('on'));
+            } else {
+              filterCats.clear(); filterCats.add(val);
+              document.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c.dataset.cat === val));
+            }
+            lastFilterText = null; renderVessels();
+            break;
+          case 'style':
+            if (typeof switchStyle === 'function') switchStyle(val);
+            break;
+          case 'weather':
+            if (typeof toggleWeather === 'function') toggleWeather(val === 'on');
+            break;
+        }
+      }
     }
 
     // Inject chat styles
