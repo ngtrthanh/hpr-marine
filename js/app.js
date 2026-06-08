@@ -122,81 +122,6 @@
       return t.replace(/@+$/, '').trim();
     }
 
-    function decodePosition(bits) {
-      // Works for types 1,2,3 (168 bits)
-      const mmsi = bitsToInt(bits, 8, 30);
-      const status = bitsToInt(bits, 38, 4);
-      const sog = bitsToInt(bits, 50, 10) / 10;
-      const lon = bitsToSignedInt(bits, 61, 28) / 600000;
-      const lat = bitsToSignedInt(bits, 89, 27) / 600000;
-      const cog = bitsToInt(bits, 116, 12) / 10;
-      const hdg = bitsToInt(bits, 128, 9);
-      return { mmsi, status, sog, lon, lat, cog, hdg };
-    }
-
-    function decodeType18(bits) {
-      const mmsi = bitsToInt(bits, 8, 30);
-      const sog = bitsToInt(bits, 46, 10) / 10;
-      const lon = bitsToSignedInt(bits, 57, 28) / 600000;
-      const lat = bitsToSignedInt(bits, 85, 27) / 600000;
-      const cog = bitsToInt(bits, 112, 12) / 10;
-      const hdg = bitsToInt(bits, 124, 9);
-      return { mmsi, sog, lon, lat, cog, hdg };
-    }
-
-    function decodeType19(bits) {
-      const mmsi = bitsToInt(bits, 8, 30);
-      const sog = bitsToInt(bits, 46, 10) / 10;
-      const lon = bitsToSignedInt(bits, 57, 28) / 600000;
-      const lat = bitsToSignedInt(bits, 85, 27) / 600000;
-      const cog = bitsToInt(bits, 112, 12) / 10;
-      const hdg = bitsToInt(bits, 124, 9);
-      const name = bitsToText(bits, 143, 120);
-      const shiptype = bitsToInt(bits, 263, 8);
-      return { mmsi, sog, lon, lat, cog, hdg, name, shiptype };
-    }
-
-    function decodeType5(bits) {
-      const mmsi = bitsToInt(bits, 8, 30);
-      const imo = bitsToInt(bits, 40, 30);
-      const callsign = bitsToText(bits, 70, 42);
-      const name = bitsToText(bits, 112, 120);
-      const shiptype = bitsToInt(bits, 232, 8);
-      const destination = bitsToText(bits, 302, 120);
-      return { mmsi, imo, callsign, name, shiptype, destination };
-    }
-
-    function decodeType24(bits) {
-      const mmsi = bitsToInt(bits, 8, 30);
-      const part = bitsToInt(bits, 38, 2);
-      if (part === 0) {
-        const name = bitsToText(bits, 40, 120);
-        return { mmsi, name };
-      } else {
-        const shiptype = bitsToInt(bits, 40, 8);
-        const callsign = bitsToText(bits, 48, 42);
-        return { mmsi, shiptype, callsign };
-      }
-    }
-
-    function decodeType27(bits) {
-      const mmsi = bitsToInt(bits, 8, 30);
-      const lon = bitsToSignedInt(bits, 44, 18) / 600;
-      const lat = bitsToSignedInt(bits, 62, 17) / 600;
-      const sog = bitsToInt(bits, 79, 6) / 2;
-      const cog = bitsToInt(bits, 85, 9) / 2;
-      return { mmsi, lon, lat, sog, cog };
-    }
-
-    function decodeType21(bits) {
-      const mmsi = bitsToInt(bits, 8, 30);
-      const atonType = bitsToInt(bits, 38, 5);
-      const name = bitsToText(bits, 43, 120);
-      const lon = bitsToSignedInt(bits, 164, 28) / 600000;
-      const lat = bitsToSignedInt(bits, 192, 27) / 600000;
-      return { mmsi, atonType, name, lon, lat, isAton: true };
-    }
-
     // ═══════════════════════════════════════════════════════════════
     // VESSEL STORE
     // ═══════════════════════════════════════════════════════════════
@@ -310,67 +235,8 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // NMEA MULTI-PART ASSEMBLER
+    // WEBSOCKET CLIENT
     // ═══════════════════════════════════════════════════════════════
-    const fragments = {}; // key → {parts:[], total}
-
-    function processLine(line) {
-      line = line.trim();
-      if (!line.startsWith('!AIVDM') && !line.startsWith('!AIVDO') && !line.startsWith('!BSVDM') && !line.startsWith('!BSVDO')) return;
-      const parts = line.split(',');
-      if (parts.length < 7) return;
-
-      const total = parseInt(parts[1]);
-      const partNum = parseInt(parts[2]);
-      const seqId = parts[3];
-      const channel = parts[4] || '';
-      const payload = parts[5];
-
-      if (total === 1) {
-        decode(payload);
-      } else {
-        // Use seqId+channel as key; if seqId empty, use channel alone
-        const key = (seqId || channel || 'x') + '_' + total;
-        if (!fragments[key]) fragments[key] = { parts: [], total, t: Date.now() };
-        fragments[key].parts[partNum - 1] = payload;
-        if (fragments[key].parts.filter(Boolean).length === total) {
-          decode(fragments[key].parts.join(''));
-          delete fragments[key];
-        }
-      }
-    }
-
-    function decode(payload) {
-      const bits = payloadToBits(payload);
-      if (bits.length < 6) return;
-      const msgType = bitsToInt(bits, 0, 6);
-      let data;
-      switch (msgType) {
-        case 1: case 2: case 3:
-          if (bits.length >= 149) data = decodePosition(bits);
-          break;
-        case 5:
-          if (bits.length >= 420) data = decodeType5(bits);
-          break;
-        case 18:
-          if (bits.length >= 133) data = decodeType18(bits);
-          break;
-        case 19:
-          if (bits.length >= 271) data = decodeType19(bits);
-          break;
-        case 24:
-          if (bits.length >= 160) data = decodeType24(bits);
-          break;
-        case 27:
-          if (bits.length >= 94) data = decodeType27(bits);
-          break;
-        case 21:
-          if (bits.length >= 219) data = decodeType21(bits);
-          break;
-      }
-      if (data) updateVessel(data);
-      msgCount++;
-    }
 
     // ═══════════════════════════════════════════════════════════════
     // INDEXEDDB CACHE — persist static data + trails across reloads
@@ -480,12 +346,9 @@
     let wsRetries = 0;
     let wsBackoff = 1000;
 
-    const isBinaryMode = urlParams.get('mode') !== 'nmea';
-
     function getWsUrl() {
       if (urlParams.get('ws')) return urlParams.get('ws');
-      if (isBinaryMode) return 'wss://stream.hpradar.com/ws1?mode=binary';
-      return 'wss://stream.hpradar.com/ws1';
+      return 'wss://stream.hpradar.com/ws1?mode=binary';
     }
 
     function showWsBanner(msg) {
@@ -498,11 +361,11 @@
     function connectWs() {
       const url = getWsUrl();
       try { ws = new WebSocket(url); } catch (e) { wsStatus = 'err'; updateDot(); scheduleReconnect(); return; }
-      if (isBinaryMode) ws.binaryType = 'arraybuffer';
+      ws.binaryType = 'arraybuffer';
       wsStatus = 'connecting';
       showWsBanner('Connecting…');
       ws.onopen = () => { wsStatus = 'ok'; wsRetries = 0; wsBackoff = 1000; updateDot(); hideWsBanner(); hideSkeleton(); };
-      ws.onmessage = isBinaryMode ? onBinaryMsg : (ev) => { msgBuf.push(ev.data); scheduleProcess(); };
+      ws.onmessage = onBinaryMsg;
       ws.onerror = () => { wsStatus = 'err'; updateDot(); };
       ws.onclose = () => { wsStatus = 'err'; updateDot(); scheduleReconnect(); };
     }
@@ -633,22 +496,7 @@
       if (!trailTimer && !paused) trailTimer = setTimeout(() => { trailTimer = 0; renderTrails(); }, 2000);
     }
 
-    let msgBuf = [];
-    let rafId = 0;
-    function scheduleProcess() {
-      if (!rafId) rafId = requestAnimationFrame(processBatch);
-    }
-    function processBatch() {
-      rafId = 0;
-      if (paused) return;
-      const batch = msgBuf; msgBuf = [];
-      for (let i = 0; i < batch.length; i++) {
-        const lines = batch[i].split('\n');
-        for (let j = 0; j < lines.length; j++) processLine(lines[j]);
-      }
-      if (dirtySet.size) scheduleRender();
-      if (trailsDirty.size) scheduleTrails();
-    }
+    // ═══════════════════════════════════════════════════════════════
 
     function reconnect() {
       if (ws) { ws.onclose = null; ws.close(); }
@@ -939,74 +787,6 @@
       // Enrichment API — resolve unknowns from TSDB (skip in binary mode — server enriches)
       const enrichCache = new Set();
       let enrichBusy = false;
-      if (!isBinaryMode) setInterval(() => {
-        if (enrichBusy) return;
-        const unknowns = [];
-        for (const [mmsi, v] of vessels) {
-          if (v.shiptype === undefined && v.lon !== undefined && !enrichCache.has(mmsi)) unknowns.push(mmsi);
-          if (unknowns.length >= 500) break;
-        }
-        if (!unknowns.length) return;
-        enrichBusy = true;
-        fetch('https://stream.hpradar.com/enrich', {
-          method: 'POST', headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({mmsis: unknowns})
-        }).then(r => r.json()).then(data => {
-          for (const m of unknowns) {
-            enrichCache.add(m);
-            const info = data[m];
-            const v = vessels.get(m);
-            if (!v) continue;
-            if (info) {
-              if (info.shiptype) v.shiptype = info.shiptype;
-              if (info.name && !v.name) v.name = info.name;
-              if (info.callsign && !v.callsign) v.callsign = info.callsign;
-              if (info.imo && !v.imo) v.imo = info.imo;
-              if (info.class_desc) v.classDesc = info.class_desc;
-              if (info.flag_country) v.flagCountry = info.flag_country;
-              if (info.gross_tonnage) v.grossTonnage = info.gross_tonnage;
-              if (info.to_bow) { v.to_bow = info.to_bow; v.to_stern = info.to_stern; v.to_port = info.to_port; v.to_starboard = info.to_starboard; }
-              dirtySet.add(m);
-            } else {
-              // Not in DB — mark as type 0 so it's no longer "undefined"
-              v.shiptype = 0;
-              dirtySet.add(m);
-            }
-          }
-        }).catch(() => {}).finally(() => { enrichBusy = false; });
-      }, 500);
-
-      // Re-enrich stale type-0 unknowns every 30s (TSDB may have been backfilled)
-      if (!isBinaryMode) setInterval(() => {
-        if (enrichBusy || paused) return;
-        const stale = [];
-        for (const [mmsi, v] of vessels) {
-          if (v.shiptype === 0 && v.lon !== undefined) stale.push(mmsi);
-          if (stale.length >= 100) break;
-        }
-        if (!stale.length) return;
-        enrichBusy = true;
-        fetch('https://stream.hpradar.com/enrich', {
-          method: 'POST', headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({mmsis: stale})
-        }).then(r => r.json()).then(data => {
-          for (const m of stale) {
-            const info = data[m];
-            const v = vessels.get(m);
-            if (!v || !info || !info.shiptype) continue;
-            v.shiptype = info.shiptype;
-            if (info.name && !v.name) v.name = info.name;
-            if (info.callsign && !v.callsign) v.callsign = info.callsign;
-            if (info.class_desc) v.classDesc = info.class_desc;
-            if (info.flag_country) v.flagCountry = info.flag_country;
-            if (info.gross_tonnage) v.grossTonnage = info.gross_tonnage;
-            if (info.to_bow) { v.to_bow = info.to_bow; v.to_stern = info.to_stern; v.to_port = info.to_port; v.to_starboard = info.to_starboard; }
-            dirtySet.add(m);
-            scheduleRender();
-          }
-        }).catch(() => {}).finally(() => { enrichBusy = false; });
-      }, 30000);
-
       openIDB().then(() => {
         return loadBinFromIDB();
       }).finally(connectWs);
@@ -1295,7 +1075,7 @@
         `<div style="font-size:var(--fs-xs);color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px 2px;border-top:1px solid var(--border);margin-top:var(--s2)">Distance</div>` +
         dists.map(d => `<button class="pop-item${d.v===units.dist?' active':''}" onclick="setUnit('dist','${d.v}')">${d.l}</button>`).join('') +
         `<div style="border-top:1px solid var(--border);margin-top:var(--s2);padding-top:var(--s2)"><button class="pop-item${autoShowCard?' active':''}" onclick="toggleAutoCard()">Auto-show card</button></div>` +
-        `<div style="border-top:1px solid var(--border);margin-top:var(--s2);padding-top:var(--s2)"><button class="pop-item" id="modeToggle" onclick="toggleMode()">${isBinaryMode?'Switch to NMEA':'Switch to Binary'}</button></div>`;
+        `<div style="border-top:1px solid var(--border);margin-top:var(--s2);padding-top:var(--s2)"></div>`;
     }
     function toggleAutoCard() { autoShowCard = !autoShowCard; localStorage.setItem('autoShowCard', autoShowCard); buildSettingsMenu(); }
     // setStatus removed — list tabs handle status filtering
@@ -1517,8 +1297,8 @@
         stations.set(mmsi, {
           lon, lat,
           day: dv.getUint8(8), hour: dv.getUint8(9), min: dv.getUint8(10),
-          wspeed: wspeed < 127 ? wspeed : null,
-          wgust: dv.getUint8(12) < 127 ? dv.getUint8(12) : null,
+          wspeed: wspeed < 127 ? Math.round(wspeed * 1.94384) : null,
+          wgust: dv.getUint8(12) < 127 ? Math.round(dv.getUint8(12) * 1.94384) : null,
           wdir: wdir < 360 ? wdir : null,
           temp: airtemp > -1024 ? airtemp / 10 : null,
           humidity: humidity <= 100 ? humidity : null,
@@ -2090,12 +1870,6 @@
     if (window.innerWidth > 600) { document.getElementById('vlist').classList.add('open'); document.getElementById('railListBtn').classList.add('on'); document.documentElement.classList.add('vlist-open'); renderVesselList(); }
     buildRegionMenu();
     buildSettingsMenu();
-    function toggleMode() {
-      const p = new URLSearchParams(location.search);
-      if (isBinaryMode) { p.set('mode', 'nmea'); } else { p.delete('mode'); }
-      location.search = p.toString();
-    }
-
     // ═══════════════════════════════════════════════════════════════
     // SPA ROUTER
     // ═══════════════════════════════════════════════════════════════
