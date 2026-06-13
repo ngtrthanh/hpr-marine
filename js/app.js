@@ -1240,7 +1240,14 @@
       else { let i = 0; for (const f of featureCache.values()) featureArray[i++] = f; }
 
       const src = map.getSource('vessels');
-      if (src) src.setData({ type: 'FeatureCollection', features: featureArray });
+      if (src) {
+        src.setData({ type: 'FeatureCollection', features: featureArray });
+        // GeoJSON setData wipes feature-state, so re-apply the icon-fade opacity for the
+        // (small) set of hull-faded vessels — otherwise hidden icons pop back over hulls.
+        for (const [mmsi, op] of iconOp) {
+          if (op !== 1) map.setFeatureState({ source: 'vessels', id: mmsi }, { iconOp: op });
+        }
+      }
       if (selectedMmsi) updateSelected();
       syncIconFade(); // initialise/animate icon opacity for any new vessels
     }
