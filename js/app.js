@@ -715,7 +715,7 @@
           'icon-rotate': ['get', 'heading'],
           'icon-rotation-alignment': 'map',
           'icon-allow-overlap': true,
-          'icon-optional': true,
+          'icon-optional': false, // never drop the icon to make room for its label
           'text-field': ['step', ['zoom'], '', 12, ['get', 'label']],
           'text-font': ['Noto Sans Medium'],
           'text-size': ['interpolate', ['linear'], ['zoom'], 12, 11, 16, 14],
@@ -727,9 +727,10 @@
           'text-color': labelColors().text,
           'text-halo-color': labelColors().halo,
           'text-halo-width': 1.6,
-          // Icon is the primary marker and is ALWAYS visible. Labels and hulls are
-          // additive on top — they never hide the icon.
-          'icon-opacity': 1,
+          // Icon cross-fades against its hull: iconA (a feature property, so it survives
+          // setData) eases 1→0 only for vessels whose hull is actually drawn this frame,
+          // and back to 1 otherwise. Defaults to 1, so a vessel is never blank.
+          'icon-opacity': ['number', ['get', 'iconA'], 1],
           // Labels are part of "hull view" — fade in at z12 and stay visible (never fade to 0).
           'text-opacity': ['interpolate', ['linear'], ['zoom'], 11.5, 0, 12, 1]
         }
@@ -1173,6 +1174,10 @@
     // RENDER (optimized: cached features, split trails to 5s)
     // ═══════════════════════════════════════════════════════════════
     const featureCache = new Map(); // mmsi → Feature object (reused)
+    const hullSet = new Set();      // mmsi whose hull is actually drawn at the current zoom
+    const iconA = new Map();        // mmsi → eased icon opacity (0..1); stored as feature.iconA
+    let iconRAF = 0, iconLast = 0;
+    const ICON_FADE_MS = 200;       // icon↔hull cross-fade duration
     let lastFilterText = '', lastFilterCat = '';
 
     function buildFeature(mmsi, v) {
@@ -1189,11 +1194,13 @@
         f.geometry.coordinates[1] = v.lat;
         const p = f.properties;
         p.color = color; p.heading = heading; p.label = v.name || ''; p.icon = icon; p.cat = cat; p.hasDim = hasDim; p.trust = trust;
+        p.iconA = iconA.has(mmsi) ? iconA.get(mmsi) : (hullSet.has(mmsi) ? 0 : 1);
         return f;
       }
       return {
         type: 'Feature', geometry: { type: 'Point', coordinates: [v.lon, v.lat] },
-        properties: { mmsi, color, heading, label: v.name || '', icon, cat, hasDim, trust }
+        properties: { mmsi, color, heading, label: v.name || '', icon, cat, hasDim, trust,
+          iconA: iconA.has(mmsi) ? iconA.get(mmsi) : (hullSet.has(mmsi) ? 0 : 1) }
       };
     }
 
@@ -1227,7 +1234,7 @@
 
       // Remove pruned vessels from cache (and their icon-fade state)
       for (const mmsi of featureCache.keys()) {
-        if (!vessels.has(mmsi)) featureCache.delete(mmsi);
+        if (!vessels.has(mmsi)) { featureCache.delete(mmsi); iconA.delete(mmsi); }
       }
 
       // Reuse array — rebuild only when size changes
@@ -1237,6 +1244,7 @@
       const src = map.getSource('vessels');
       if (src) src.setData({ type: 'FeatureCollection', features: featureArray });
       if (selectedMmsi) updateSelected();
+      easeIcons(); // initialise/animate icon cross-fade for any new vessels
     }
 
     function renderTrails() {
@@ -1280,8 +1288,10 @@
       const ts = map.getSource('trails'); if (ts) ts.setData({ type: 'FeatureCollection', features: trails });
       const vc = map.getSource('vectors'); if (vc) vc.setData({ type: 'FeatureCollection', features: vectors });
 
-      // Hull polygons (real dimensions, additive on top of the always-visible icon)
+      // Hull polygons (real dimensions). hullSet records which vessels actually get a
+      // hull this frame → drives the icon cross-fade (icon fades out only for these).
       const zoom = map.getZoom();
+      hullSet.clear();
       if (zoom >= 12) {
         const centerLat = map.getCenter().lat;
         const cosLat = Math.cos(centerLat * Math.PI / 180);
@@ -1336,6 +1346,7 @@
           ]];
           const color = TYPE_COLORS[cat] || TYPE_COLORS.unknown;
           hulls.push({ type:'Feature', geometry:{type:'Polygon', coordinates:coords}, properties:{color} });
+          hullSet.add(mmsi); // hull is drawn for this vessel → its icon cross-fades out
           // GPS antenna point
           antennas.push({ type:'Feature', geometry:{type:'Point', coordinates:[v.lon,v.lat]}, properties:{} });
         }
@@ -1345,7 +1356,37 @@
         const hs = map.getSource('hulls'); if (hs) hs.setData({ type:'FeatureCollection', features:[] });
         const as = map.getSource('antennas'); if (as) as.setData({ type:'FeatureCollection', features:[] });
       }
+      easeIcons(); // cross-fade icons toward their new hull-driven targets
+    }
 
+    // ── Icon↔hull cross-fade (feature-PROPERTY driven, survives setData) ──
+    // Eases each vessel's icon opacity toward 0 (its hull is drawn) or 1 (no hull),
+    // writing the value into feature.iconA. Re-setData's the vessels source only while
+    // something is mid-fade; at rest it does one pass and stops. Gap-free: a vessel
+    // without a renderable hull stays at 1, so there is always a marker to show.
+    function easeIcons() {
+      if (!iconRAF) { iconLast = performance.now(); iconRAF = requestAnimationFrame(stepEaseIcons); }
+    }
+    function stepEaseIcons(now) {
+      const dt = Math.min(now - iconLast, 100); iconLast = now;
+      const rate = dt / ICON_FADE_MS;
+      let active = false, changed = false;
+      for (const [mmsi, f] of featureCache) {
+        const target = hullSet.has(mmsi) ? 0 : 1;
+        let a = iconA.get(mmsi);
+        if (a === undefined) a = target; // snap on first appearance (no spurious fade)
+        if (a !== target) {
+          a = a < target ? Math.min(target, a + rate) : Math.max(target, a - rate);
+          if (a !== target) active = true;
+        }
+        iconA.set(mmsi, a);
+        if (f.properties.iconA !== a) { f.properties.iconA = a; changed = true; }
+      }
+      if (changed) {
+        const s = map.getSource('vessels');
+        if (s) s.setData({ type: 'FeatureCollection', features: Array.from(featureCache.values()) });
+      }
+      iconRAF = active ? requestAnimationFrame(stepEaseIcons) : 0;
     }
 
     // ═══════════════════════════════════════════════════════════════
