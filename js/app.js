@@ -1314,9 +1314,11 @@
           // hulls and caused overlap at z12–14, so it's removed.) Dimensionless/sub-4px
           // vessels never vanish because their icon is retained (see icon-opacity).
           if ((W / mPerPx) < 4) continue;
-          // Heading
-          const hdgDeg = v.hdg !== undefined && v.hdg < 360 ? v.hdg : (v.cog !== undefined && v.cog < 360 && v.sog > 1 ? v.cog : undefined);
-          if (hdgDeg === undefined) continue;
+          // Orientation: prefer true heading, else course (even when stationary — a moored
+          // ship keeps a sensible last course), else north so a dimensioned hull still draws.
+          const hdgDeg = (v.hdg !== undefined && v.hdg < 360) ? v.hdg
+                       : (v.cog !== undefined && v.cog < 360) ? v.cog
+                       : 0;
           const rad = hdgDeg * Math.PI / 180;
           const sin = Math.sin(rad), cos = Math.cos(rad);
           const pt = (x, y) => [v.lon + (x*cos + y*sin)*mLon, v.lat + (-x*sin + y*cos)*mLat];
