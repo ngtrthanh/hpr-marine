@@ -639,7 +639,8 @@
     function addVesselLayers() {
       map.addSource('vessels', {
         type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] }
+        data: { type: 'FeatureCollection', features: [] },
+        promoteId: 'mmsi' // expose mmsi as feature id so we can drive per-vessel feature-state
       });
       map.addSource('trails', {
         type: 'geojson',
@@ -726,10 +727,10 @@
           'text-color': labelColors().text,
           'text-halo-color': labelColors().halo,
           'text-halo-width': 1.6,
-          // Hull-aware: hide the icon ONLY when this vessel's hull is actually being drawn
-          // (renderTrails sets feature.hull=1 per frame). Otherwise the icon always shows,
-          // so no vessel ever disappears — at any zoom or ship size, no flicker.
-          'icon-opacity': ['case', ['==', ['get', 'hull'], 1], 0, 1],
+          // Hull-aware soft cross-fade: opacity is eased per-vessel via feature-state
+          // (0 when a hull represents it, 1 otherwise). Defaults to 1 until set, so a
+          // vessel always shows until its hull takes over. No zoom guess → no flicker.
+          'icon-opacity': ['number', ['feature-state', 'iconOp'], 1],
           // Labels are part of "hull view" — fade in at z12 and stay visible (never fade to 0).
           'text-opacity': ['interpolate', ['linear'], ['zoom'], 11.5, 0, 12, 1]
         }
@@ -1190,12 +1191,11 @@
         f.geometry.coordinates[1] = v.lat;
         const p = f.properties;
         p.color = color; p.heading = heading; p.label = v.name || ''; p.icon = icon; p.cat = cat; p.hasDim = hasDim; p.trust = trust;
-        p.hull = hullMmsi.has(mmsi) ? 1 : 0;
         return f;
       }
       return {
         type: 'Feature', geometry: { type: 'Point', coordinates: [v.lon, v.lat] },
-        properties: { mmsi, color, heading, label: v.name || '', icon, cat, hasDim, trust, hull: hullMmsi.has(mmsi) ? 1 : 0 }
+        properties: { mmsi, color, heading, label: v.name || '', icon, cat, hasDim, trust }
       };
     }
 
@@ -1227,9 +1227,12 @@
       }
       dirtySet.clear();
 
-      // Remove pruned vessels from cache
+      // Remove pruned vessels from cache (and their icon-fade state)
       for (const mmsi of featureCache.keys()) {
-        if (!vessels.has(mmsi)) featureCache.delete(mmsi);
+        if (!vessels.has(mmsi)) {
+          featureCache.delete(mmsi);
+          if (iconOp.delete(mmsi)) { try { map.removeFeatureState({ source: 'vessels', id: mmsi }); } catch (e) {} }
+        }
       }
 
       // Reuse array — rebuild only when size changes
@@ -1239,6 +1242,7 @@
       const src = map.getSource('vessels');
       if (src) src.setData({ type: 'FeatureCollection', features: featureArray });
       if (selectedMmsi) updateSelected();
+      syncIconFade(); // initialise/animate icon opacity for any new vessels
     }
 
     function renderTrails() {
@@ -1348,17 +1352,37 @@
         const as = map.getSource('antennas'); if (as) as.setData({ type:'FeatureCollection', features:[] });
       }
 
-      // Push hull-aware icon flags to the rendered vessels so icons hide/show in lockstep
-      // with hulls (no zoom guess → no small-ship flicker). Re-setData only when changed.
-      let iconDirty = false;
-      for (const [mmsi, f] of featureCache) {
-        const h = hullMmsi.has(mmsi) ? 1 : 0;
-        if (f.properties.hull !== h) { f.properties.hull = h; iconDirty = true; }
+      // Soft cross-fade: ease each vessel's icon opacity toward its target (0 if a hull
+      // now represents it, else 1) via feature-state — smooth, no full-source rebuild.
+      syncIconFade();
+    }
+
+    // ── Soft icon cross-fade (feature-state driven, eased over ICON_FADE_MS) ──
+    const iconOp = new Map(); // mmsi → current icon opacity (0..1)
+    let iconRAF = 0, iconLastT = 0;
+    const ICON_FADE_MS = 220;
+    function syncIconFade() {
+      if (!iconRAF) { iconLastT = performance.now(); iconRAF = requestAnimationFrame(stepIconFade); }
+    }
+    function stepIconFade(now) {
+      const dt = Math.min(now - iconLastT, 100); iconLastT = now;
+      const rate = dt / ICON_FADE_MS;
+      let active = false;
+      for (const mmsi of featureCache.keys()) {
+        const target = hullMmsi.has(mmsi) ? 0 : 1;
+        let op = iconOp.get(mmsi);
+        if (op === undefined) { // first time: snap to target, no animation on appearance
+          iconOp.set(mmsi, target);
+          map.setFeatureState({ source: 'vessels', id: mmsi }, { iconOp: target });
+          continue;
+        }
+        if (op === target) continue;
+        op = op < target ? Math.min(target, op + rate) : Math.max(target, op - rate);
+        iconOp.set(mmsi, op);
+        map.setFeatureState({ source: 'vessels', id: mmsi }, { iconOp: op });
+        if (op !== target) active = true;
       }
-      if (iconDirty) {
-        const vsrc = map.getSource('vessels');
-        if (vsrc) vsrc.setData({ type: 'FeatureCollection', features: Array.from(featureCache.values()) });
-      }
+      iconRAF = active ? requestAnimationFrame(stepIconFade) : 0;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -1568,7 +1592,7 @@
     function onVesselClick(e) {
       const f = pickNearestFeature(e);
       if (!f) return;
-      const mmsi = f.properties.mmsi;
+      const mmsi = f.properties.mmsi ?? f.id;
       const v = vessels.get(mmsi);
       if (!v) return;
       selectedMmsi = mmsi;
@@ -1906,7 +1930,7 @@
       if (e.features.length === 1 || !e.point) return e.features[0];
       let best = e.features[0], bestD = Infinity;
       for (const f of e.features) {
-        const m = vessels.get(f.properties.mmsi);
+        const m = vessels.get(f.properties.mmsi ?? f.id);
         if (!m || m.lon === undefined) continue;
         const p = map.project([m.lon, m.lat]);
         const dx = p.x - e.point.x, dy = p.y - e.point.y, d = dx * dx + dy * dy;
@@ -1917,7 +1941,7 @@
     function showPopup(e) {
       const f = pickNearestFeature(e);
       if (!f) return;
-      const mmsi = f.properties.mmsi;
+      const mmsi = f.properties.mmsi ?? f.id;
       const v = vessels.get(mmsi);
       if (!v) return;
       const coords = [v.lon, v.lat];
