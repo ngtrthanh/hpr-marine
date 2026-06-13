@@ -359,12 +359,17 @@
     let wsRetries = 0;
     let wsBackoff = 1000;
 
-    // Opt-in zstd: enabled only when the page URL has ?zstd=1 AND the fzstd decoder
-    // loaded. Lets you verify compression on a live session before making it default. (D2)
-    const useZstd = urlParams.get('zstd') === '1' && typeof fzstd !== 'undefined';
+    // zstd on by default (verified live). Opt out with ?zstd=0; auto-falls back to raw
+    // if the fzstd decoder didn't load. (D2)
+    const useZstd = urlParams.get('zstd') !== '0' && typeof fzstd !== 'undefined';
     function getWsUrl() {
       if (urlParams.get('ws')) return urlParams.get('ws');
       return 'wss://stream.hpradar.com/ws1?mode=binary' + (useZstd ? '&zstd=1' : '');
+    }
+    // Backend HTTP base (same host as the WS) for small API calls like station credit.
+    function apiBase() {
+      try { const u = new URL(getWsUrl()); return (u.protocol === 'wss:' ? 'https:' : 'http:') + '//' + u.host; }
+      catch (e) { return ''; }
     }
 
     function showWsBanner(msg) {
@@ -1658,6 +1663,7 @@
       }
       document.getElementById('pBody').innerHTML = html;
       fetchVesselPhoto(v.imo, mmsi);
+      fetchStation(mmsi);
       document.getElementById('pActions').innerHTML =
         `<button class="act${followMode?' on':''}" id="actFollow" onclick="toggleFollow()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>Follow</button>` +
         `<button class="act" onclick="copyMMSI(${mmsi})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>Copy</button>` +
@@ -1672,6 +1678,21 @@
 
     let autoShowCard = localStorage.getItem('autoShowCard') !== 'false';
     function closePanel() { document.getElementById('vcard').classList.remove('open'); document.documentElement.classList.remove('vcard-open'); selectedMmsi = null; followMode = false; updateUrl(); updateSelected(); renderTrails(); }
+
+    // Which feeder station supplied this vessel → "Data supplied by Station: …" in the card.
+    function fetchStation(mmsi) {
+      const base = apiBase();
+      if (!base) return;
+      fetch(base + '/api/vessel-source?mmsi=' + mmsi).then(r => r.json()).then(d => {
+        if (!d || !d.found || selectedMmsi !== mmsi) return;
+        const body = document.getElementById('pBody');
+        if (!body || document.getElementById('pStationSec')) return;
+        const el = document.createElement('div');
+        el.className = 'sc-section'; el.id = 'pStationSec';
+        el.innerHTML = `<div class="st">Source Station</div><div class="sf"><span class="k">Data supplied by</span><span class="v">${esc(d.station)}</span></div>`;
+        body.appendChild(el);
+      }).catch(() => {});
+    }
     function copyMMSI(mmsi) { navigator.clipboard?.writeText(String(mmsi)); flash('MMSI copied'); }
     function shareVessel(mmsi) {
       const url = location.origin + location.pathname + `?mmsi=${mmsi}`;
