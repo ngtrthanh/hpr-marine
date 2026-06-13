@@ -715,8 +715,13 @@
           'text-color': labelColors().text,
           'text-halo-color': labelColors().halo,
           'text-halo-width': 1.6,
-          'icon-opacity': ['interpolate', ['linear'], ['zoom'], 13.5, 1, 15, 0],
-          'text-opacity': ['interpolate', ['linear'], ['zoom'], 13.5, 1, 15, 0]
+          // Fade the icon out only for vessels that HAVE a hull to replace it.
+          // Dimensionless vessels (hasDim=0) keep their icon at all zooms so they never vanish.
+          'icon-opacity': ['case', ['==', ['get', 'hasDim'], 1],
+            ['interpolate', ['linear'], ['zoom'], 13.5, 1, 15, 0],
+            1],
+          // Labels are part of "hull view" — fade in at z12 and stay visible (never fade to 0).
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 11.5, 0, 12, 1]
         }
       });
 
@@ -799,8 +804,10 @@
       map.on('click', 'vessels-symbol', onVesselClick);
       map.on('click', 'antennas-circle', onVesselClick);
       map.on('mouseenter', 'vessels-circle', (e) => { map.getCanvas().style.cursor = 'pointer'; showPopup(e); });
+      map.on('mousemove', 'vessels-circle', showPopup); // track nearest in a cluster (B3)
       map.on('mouseleave', 'vessels-circle', () => { map.getCanvas().style.cursor = ''; hidePopup(); });
       map.on('mouseenter', 'vessels-symbol', (e) => { map.getCanvas().style.cursor = 'pointer'; showPopup(e); });
+      map.on('mousemove', 'vessels-symbol', showPopup); // track nearest in a cluster (B3)
       map.on('mouseleave', 'vessels-symbol', () => { map.getCanvas().style.cursor = ''; hidePopup(); });
       map.on('mouseenter', 'antennas-circle', (e) => { map.getCanvas().style.cursor = 'pointer'; showPopup(e); });
       map.on('mouseleave', 'antennas-circle', () => { map.getCanvas().style.cursor = ''; hidePopup(); });
@@ -1141,6 +1148,9 @@
     function updateFilterBadge() {} // badge removed — chips are visible in list header
     function toggleLayer(id, on) {
       if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+      // Repopulate the source with current data immediately so toggling ON shows live
+      // trails/vectors/hulls/antennas instead of stale (or empty) geometry. (B2)
+      if (on) renderTrails();
     }
     function toggleLabels(on) {
       if (map.getLayer('vessels-symbol')) {
@@ -1288,15 +1298,18 @@
           if (L < 5 || L > 500 || W < 2 || W > 100) continue;
           const ratio = L / W;
           if (ratio < 1.5 || ratio > 12) continue;
-          // Size gate: render hull only when its beam exceeds 4px on screen
-          if ((W / mPerPx) < 4) continue;
           if (!matchesFilter(mmsi, v)) continue;
           // Heading
           const hdgDeg = v.hdg !== undefined && v.hdg < 360 ? v.hdg : (v.cog !== undefined && v.cog < 360 && v.sog > 1 ? v.cog : undefined);
           if (hdgDeg === undefined) continue;
+          // Min-size floor (B1): never let a hull shrink below ~6px beam, so it can't vanish
+          // during the icon→hull fade. Uniform scale about the antenna point, capped to avoid blobs.
+          let hscale = 1;
+          const beamPx = W / mPerPx;
+          if (beamPx < 6) hscale = Math.min(6 / beamPx, 4);
           const rad = hdgDeg * Math.PI / 180;
           const sin = Math.sin(rad), cos = Math.cos(rad);
-          const pt = (x, y) => [v.lon + (x*cos + y*sin)*mLon, v.lat + (-x*sin + y*cos)*mLat];
+          const pt = (x, y) => [v.lon + (x*cos + y*sin)*hscale*mLon, v.lat + (-x*sin + y*cos)*hscale*mLat];
           // Shape by type
           const cat = shipCategory(v.shiptype, mmsi);
           const p = hullPresets[cat] || hullPresets.cargo;
@@ -1527,8 +1540,9 @@
     // VESSEL PANEL
     // ═══════════════════════════════════════════════════════════════
     function onVesselClick(e) {
-      if (!e.features || !e.features.length) return;
-      const mmsi = e.features[0].properties.mmsi;
+      const f = pickNearestFeature(e);
+      if (!f) return;
+      const mmsi = f.properties.mmsi;
       const v = vessels.get(mmsi);
       if (!v) return;
       selectedMmsi = mmsi;
@@ -1858,9 +1872,26 @@
     // ═══════════════════════════════════════════════════════════════
     const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12, maxWidth: '220px' });
 
+    // When several vessels stack under the pointer, pick the one whose marker is
+    // closest in screen space instead of an arbitrary e.features[0]. Stops hover/click
+    // from "ghosting" onto a neighbour; zooming in then cleanly separates them. (B3)
+    function pickNearestFeature(e) {
+      if (!e.features || !e.features.length) return null;
+      if (e.features.length === 1 || !e.point) return e.features[0];
+      let best = e.features[0], bestD = Infinity;
+      for (const f of e.features) {
+        const m = vessels.get(f.properties.mmsi);
+        if (!m || m.lon === undefined) continue;
+        const p = map.project([m.lon, m.lat]);
+        const dx = p.x - e.point.x, dy = p.y - e.point.y, d = dx * dx + dy * dy;
+        if (d < bestD) { bestD = d; best = f; }
+      }
+      return best;
+    }
     function showPopup(e) {
-      if (!e.features || !e.features.length) return;
-      const mmsi = e.features[0].properties.mmsi;
+      const f = pickNearestFeature(e);
+      if (!f) return;
+      const mmsi = f.properties.mmsi;
       const v = vessels.get(mmsi);
       if (!v) return;
       const coords = [v.lon, v.lat];
