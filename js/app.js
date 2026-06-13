@@ -1311,17 +1311,17 @@
           const ratio = L / W;
           if (ratio < 1.5 || ratio > 12) continue;
           if (!matchesFilter(mmsi, v)) continue;
+          // Real-size hulls only: render when the beam is at least ~4px on screen.
+          // Below that the icon represents the ship. (Uniform up-scaling elongated long
+          // hulls and caused overlap at z12–14, so it's removed.) Dimensionless/sub-4px
+          // vessels never vanish because their icon is retained (see icon-opacity).
+          if ((W / mPerPx) < 4) continue;
           // Heading
           const hdgDeg = v.hdg !== undefined && v.hdg < 360 ? v.hdg : (v.cog !== undefined && v.cog < 360 && v.sog > 1 ? v.cog : undefined);
           if (hdgDeg === undefined) continue;
-          // Min-size floor (B1): never let a hull shrink below ~6px beam, so it can't vanish
-          // during the icon→hull fade. Uniform scale about the antenna point, capped to avoid blobs.
-          let hscale = 1;
-          const beamPx = W / mPerPx;
-          if (beamPx < 6) hscale = Math.min(6 / beamPx, 4);
           const rad = hdgDeg * Math.PI / 180;
           const sin = Math.sin(rad), cos = Math.cos(rad);
-          const pt = (x, y) => [v.lon + (x*cos + y*sin)*hscale*mLon, v.lat + (-x*sin + y*cos)*hscale*mLat];
+          const pt = (x, y) => [v.lon + (x*cos + y*sin)*mLon, v.lat + (-x*sin + y*cos)*mLat];
           // Shape by type
           const cat = shipCategory(v.shiptype, mmsi);
           const p = hullPresets[cat] || hullPresets.cargo;
