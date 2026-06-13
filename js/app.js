@@ -727,10 +727,11 @@
           'text-halo-color': labelColors().halo,
           'text-halo-width': 1.6,
           // Fade the icon out only for vessels that HAVE a hull to replace it.
-          // Dimensionless vessels (hasDim=0) keep their icon at all zooms so they never vanish.
-          'icon-opacity': ['case', ['==', ['get', 'hasDim'], 1],
-            ['interpolate', ['linear'], ['zoom'], 13.5, 1, 15, 0],
-            1],
+          // 'zoom' must be the top-level interpolate input (MapLibre rule), so the
+          // END stop is data-driven: dimensioned -> 0, dimensionless -> stays 1 (never vanish).
+          'icon-opacity': ['interpolate', ['linear'], ['zoom'],
+            13.5, 1,
+            15, ['case', ['==', ['get', 'hasDim'], 1], 0, 1]],
           // Labels are part of "hull view" — fade in at z12 and stay visible (never fade to 0).
           'text-opacity': ['interpolate', ['linear'], ['zoom'], 11.5, 0, 12, 1]
         }
