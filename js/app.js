@@ -727,10 +727,9 @@
           'text-color': labelColors().text,
           'text-halo-color': labelColors().halo,
           'text-halo-width': 1.6,
-          // Hull-aware soft cross-fade: opacity is eased per-vessel via feature-state
-          // (0 when a hull represents it, 1 otherwise). Defaults to 1 until set, so a
-          // vessel always shows until its hull takes over. No zoom guess → no flicker.
-          'icon-opacity': ['number', ['feature-state', 'iconOp'], 1],
+          // Icon is the primary marker and is ALWAYS visible. Labels and hulls are
+          // additive on top — they never hide the icon.
+          'icon-opacity': 1,
           // Labels are part of "hull view" — fade in at z12 and stay visible (never fade to 0).
           'text-opacity': ['interpolate', ['linear'], ['zoom'], 11.5, 0, 12, 1]
         }
@@ -1174,7 +1173,6 @@
     // RENDER (optimized: cached features, split trails to 5s)
     // ═══════════════════════════════════════════════════════════════
     const featureCache = new Map(); // mmsi → Feature object (reused)
-    const hullMmsi = new Set();     // mmsi currently drawn as a hull → its icon is hidden
     let lastFilterText = '', lastFilterCat = '';
 
     function buildFeature(mmsi, v) {
@@ -1229,10 +1227,7 @@
 
       // Remove pruned vessels from cache (and their icon-fade state)
       for (const mmsi of featureCache.keys()) {
-        if (!vessels.has(mmsi)) {
-          featureCache.delete(mmsi);
-          if (iconOp.delete(mmsi)) { try { map.removeFeatureState({ source: 'vessels', id: mmsi }); } catch (e) {} }
-        }
+        if (!vessels.has(mmsi)) featureCache.delete(mmsi);
       }
 
       // Reuse array — rebuild only when size changes
@@ -1240,16 +1235,8 @@
       else { let i = 0; for (const f of featureCache.values()) featureArray[i++] = f; }
 
       const src = map.getSource('vessels');
-      if (src) {
-        src.setData({ type: 'FeatureCollection', features: featureArray });
-        // GeoJSON setData wipes feature-state, so re-apply the icon-fade opacity for the
-        // (small) set of hull-faded vessels — otherwise hidden icons pop back over hulls.
-        for (const [mmsi, op] of iconOp) {
-          if (op !== 1) map.setFeatureState({ source: 'vessels', id: mmsi }, { iconOp: op });
-        }
-      }
+      if (src) src.setData({ type: 'FeatureCollection', features: featureArray });
       if (selectedMmsi) updateSelected();
-      syncIconFade(); // initialise/animate icon opacity for any new vessels
     }
 
     function renderTrails() {
@@ -1293,9 +1280,8 @@
       const ts = map.getSource('trails'); if (ts) ts.setData({ type: 'FeatureCollection', features: trails });
       const vc = map.getSource('vectors'); if (vc) vc.setData({ type: 'FeatureCollection', features: vectors });
 
-      // Hull polygons (real dimensions, rendered only when larger than the icon)
+      // Hull polygons (real dimensions, additive on top of the always-visible icon)
       const zoom = map.getZoom();
-      hullMmsi.clear(); // recompute which vessels are hull-represented this frame
       if (zoom >= 12) {
         const centerLat = map.getCenter().lat;
         const cosLat = Math.cos(centerLat * Math.PI / 180);
@@ -1348,7 +1334,6 @@
           ]];
           const color = TYPE_COLORS[cat] || TYPE_COLORS.unknown;
           hulls.push({ type:'Feature', geometry:{type:'Polygon', coordinates:coords}, properties:{color} });
-          hullMmsi.add(mmsi); // represented by a hull → hide its icon (see icon-opacity)
           // GPS antenna point
           antennas.push({ type:'Feature', geometry:{type:'Point', coordinates:[v.lon,v.lat]}, properties:{} });
         }
@@ -1359,37 +1344,6 @@
         const as = map.getSource('antennas'); if (as) as.setData({ type:'FeatureCollection', features:[] });
       }
 
-      // Soft cross-fade: ease each vessel's icon opacity toward its target (0 if a hull
-      // now represents it, else 1) via feature-state — smooth, no full-source rebuild.
-      syncIconFade();
-    }
-
-    // ── Soft icon cross-fade (feature-state driven, eased over ICON_FADE_MS) ──
-    const iconOp = new Map(); // mmsi → current icon opacity (0..1)
-    let iconRAF = 0, iconLastT = 0;
-    const ICON_FADE_MS = 220;
-    function syncIconFade() {
-      if (!iconRAF) { iconLastT = performance.now(); iconRAF = requestAnimationFrame(stepIconFade); }
-    }
-    function stepIconFade(now) {
-      const dt = Math.min(now - iconLastT, 100); iconLastT = now;
-      const rate = dt / ICON_FADE_MS;
-      let active = false;
-      for (const mmsi of featureCache.keys()) {
-        const target = hullMmsi.has(mmsi) ? 0 : 1;
-        let op = iconOp.get(mmsi);
-        if (op === undefined) { // first time: snap to target, no animation on appearance
-          iconOp.set(mmsi, target);
-          map.setFeatureState({ source: 'vessels', id: mmsi }, { iconOp: target });
-          continue;
-        }
-        if (op === target) continue;
-        op = op < target ? Math.min(target, op + rate) : Math.max(target, op - rate);
-        iconOp.set(mmsi, op);
-        map.setFeatureState({ source: 'vessels', id: mmsi }, { iconOp: op });
-        if (op !== target) active = true;
-      }
-      iconRAF = active ? requestAnimationFrame(stepIconFade) : 0;
     }
 
     // ═══════════════════════════════════════════════════════════════
