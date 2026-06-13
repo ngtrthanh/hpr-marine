@@ -359,9 +359,12 @@
     let wsRetries = 0;
     let wsBackoff = 1000;
 
+    // Opt-in zstd: enabled only when the page URL has ?zstd=1 AND the fzstd decoder
+    // loaded. Lets you verify compression on a live session before making it default. (D2)
+    const useZstd = urlParams.get('zstd') === '1' && typeof fzstd !== 'undefined';
     function getWsUrl() {
       if (urlParams.get('ws')) return urlParams.get('ws');
-      return 'wss://stream.hpradar.com/ws1?mode=binary';
+      return 'wss://stream.hpradar.com/ws1?mode=binary' + (useZstd ? '&zstd=1' : '');
     }
 
     function showWsBanner(msg) {
@@ -398,7 +401,15 @@
     // Binary frame parser (zero NMEA decode — frames are pre-parsed by server)
     function onBinaryMsg(ev) {
       if (paused) return;
-      snapshotQueue.push(ev.data);
+      let data = ev.data; // ArrayBuffer
+      if (useZstd) {
+        try {
+          const out = fzstd.decompress(new Uint8Array(data)); // Uint8Array
+          // parseBinaryChunk needs a plain ArrayBuffer (DataView/Uint8Array(buf,off,len)).
+          data = out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength);
+        } catch (e) { console.warn('zstd decompress failed', e); return; }
+      }
+      snapshotQueue.push(data);
       if (!snapshotProcessing) drainSnapshot();
     }
 
