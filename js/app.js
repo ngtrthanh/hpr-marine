@@ -726,12 +726,10 @@
           'text-color': labelColors().text,
           'text-halo-color': labelColors().halo,
           'text-halo-width': 1.6,
-          // Fade the icon out only for vessels that HAVE a hull to replace it.
-          // 'zoom' must be the top-level interpolate input (MapLibre rule), so the
-          // END stop is data-driven: dimensioned -> 0, dimensionless -> stays 1 (never vanish).
-          'icon-opacity': ['interpolate', ['linear'], ['zoom'],
-            13.5, 1,
-            15, ['case', ['==', ['get', 'hasDim'], 1], 0, 1]],
+          // Hull-aware: hide the icon ONLY when this vessel's hull is actually being drawn
+          // (renderTrails sets feature.hull=1 per frame). Otherwise the icon always shows,
+          // so no vessel ever disappears — at any zoom or ship size, no flicker.
+          'icon-opacity': ['case', ['==', ['get', 'hull'], 1], 0, 1],
           // Labels are part of "hull view" — fade in at z12 and stay visible (never fade to 0).
           'text-opacity': ['interpolate', ['linear'], ['zoom'], 11.5, 0, 12, 1]
         }
@@ -1175,6 +1173,7 @@
     // RENDER (optimized: cached features, split trails to 5s)
     // ═══════════════════════════════════════════════════════════════
     const featureCache = new Map(); // mmsi → Feature object (reused)
+    const hullMmsi = new Set();     // mmsi currently drawn as a hull → its icon is hidden
     let lastFilterText = '', lastFilterCat = '';
 
     function buildFeature(mmsi, v) {
@@ -1191,11 +1190,12 @@
         f.geometry.coordinates[1] = v.lat;
         const p = f.properties;
         p.color = color; p.heading = heading; p.label = v.name || ''; p.icon = icon; p.cat = cat; p.hasDim = hasDim; p.trust = trust;
+        p.hull = hullMmsi.has(mmsi) ? 1 : 0;
         return f;
       }
       return {
         type: 'Feature', geometry: { type: 'Point', coordinates: [v.lon, v.lat] },
-        properties: { mmsi, color, heading, label: v.name || '', icon, cat, hasDim, trust }
+        properties: { mmsi, color, heading, label: v.name || '', icon, cat, hasDim, trust, hull: hullMmsi.has(mmsi) ? 1 : 0 }
       };
     }
 
@@ -1284,6 +1284,7 @@
 
       // Hull polygons (real dimensions, rendered only when larger than the icon)
       const zoom = map.getZoom();
+      hullMmsi.clear(); // recompute which vessels are hull-represented this frame
       if (zoom >= 12) {
         const centerLat = map.getCenter().lat;
         const cosLat = Math.cos(centerLat * Math.PI / 180);
@@ -1336,6 +1337,7 @@
           ]];
           const color = TYPE_COLORS[cat] || TYPE_COLORS.unknown;
           hulls.push({ type:'Feature', geometry:{type:'Polygon', coordinates:coords}, properties:{color} });
+          hullMmsi.add(mmsi); // represented by a hull → hide its icon (see icon-opacity)
           // GPS antenna point
           antennas.push({ type:'Feature', geometry:{type:'Point', coordinates:[v.lon,v.lat]}, properties:{} });
         }
@@ -1344,6 +1346,18 @@
       } else {
         const hs = map.getSource('hulls'); if (hs) hs.setData({ type:'FeatureCollection', features:[] });
         const as = map.getSource('antennas'); if (as) as.setData({ type:'FeatureCollection', features:[] });
+      }
+
+      // Push hull-aware icon flags to the rendered vessels so icons hide/show in lockstep
+      // with hulls (no zoom guess → no small-ship flicker). Re-setData only when changed.
+      let iconDirty = false;
+      for (const [mmsi, f] of featureCache) {
+        const h = hullMmsi.has(mmsi) ? 1 : 0;
+        if (f.properties.hull !== h) { f.properties.hull = h; iconDirty = true; }
+      }
+      if (iconDirty) {
+        const vsrc = map.getSource('vessels');
+        if (vsrc) vsrc.setData({ type: 'FeatureCollection', features: Array.from(featureCache.values()) });
       }
     }
 
